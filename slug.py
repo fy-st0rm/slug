@@ -1,13 +1,11 @@
-import sys
 import os
+import sys
 
-#TODO: [X] Create a proper parser
-#TODO: [X] Proper error handling
-#TODO: [ ] If statements
-#TODO: [ ] implement functions 
+#TODO: [ ] Properly implement equals operator
+#TODO: [ ] Ability to pop things into the stack
+#TODO: [ ] IF statements
 
 WORD = "word"
-VAR = "variable"
 
 # Data types
 INT = "int"
@@ -22,9 +20,11 @@ MINUS = "-"
 MULT  = "*"
 DIV   = "/"
 MOD   = "%"
-EQUAL = "="
+ASSIGN = "="
+EQUAL = "=="
+
 OPERATOR = "operator"
-operators = [EQUAL, PLUS, MINUS, MULT, DIV, MOD]
+operators = [ASSIGN, EQUAL, PLUS, MINUS, MULT, DIV, MOD]
 
 # Special keywords 
 PRINT    = "print"
@@ -37,7 +37,7 @@ KEYWORD  = "keyword"
 keywords = [PRINT, NEW_LINE, IF, THEN, ELSE, END]
 
 def error(token, msg):
-	print(f"\033[91mError: {file}\033[0m:{str(token.row)}:{str(token.col)}: {msg}", file=sys.stderr)
+	print(f"\033[91mError: {token.file}\033[0m:{str(token.row)}:{str(token.col)}: {msg}", file=sys.stderr)
 	exit(1)
 
 def is_float(val):
@@ -48,16 +48,17 @@ def is_float(val):
 		return False
 
 class Token:
-	def __init__(self, name, value, row, col):
+	def __init__(self, name, value, row, col, file):
 		self.name = name
 		self.value = value
 		self.row = row
 		self.col = col
+		self.file = file
 	
 	def __repr__(self):
 		return f"TOKEN({self.name}, {self.value})"
 
-def split_by_delim(line):
+def chop_word(line, file):
 	word = ""
 	words = []
 	i = 0
@@ -74,7 +75,7 @@ def split_by_delim(line):
 			word += ch
 			if str_start:
 				str_start = False
-				words.append((row, col, word))
+				words.append((row, col, word, file))
 				col += len(word) + 1
 				word = ""
 			else:
@@ -83,7 +84,7 @@ def split_by_delim(line):
 		# Splitting according to the space or tab
 		elif (ch == " " or ch == "\t" or ch == "\n") and not str_start:
 			if word:
-				words.append((row, col, word))
+				words.append((row, col, word, file))
 			col += len(word) + 1
 			word = ""
 
@@ -104,344 +105,492 @@ def create_token(program, words):
 		row = words[i][0]
 		col = words[i][1]
 		word = words[i][2]
+		file = words[i][3]
 
 		if word in data_types:
-			line.append(Token(DATA_TYPE, word, row, col))
+			line.append(Token(DATA_TYPE, word, row, col, file))
 		elif word in operators:
-			line.append(Token(OPERATOR, word, row, col))
+			line.append(Token(OPERATOR, word, row, col, file))
 		elif word.isdigit():
-			line.append(Token(INT, word, row, col))
+			line.append(Token(INT, word, row, col, file))
 		elif is_float(word):
-			line.append(Token(FLOAT, word, row, col))
+			line.append(Token(FLOAT, word, row, col, file))
 		elif word[0] == "\"" and word[-1] == "\"" and len(word) > 1:
-			line.append(Token(STR, word, row, col))
+			line.append(Token(STR, word, row, col, file))
 		elif word in keywords:
-			line.append(Token(KEYWORD, word, row, col))
+			line.append(Token(KEYWORD, word, row, col, file))
 		else:
-			line.append(Token(WORD, word, row, col))
+			line.append(Token(WORD, word, row, col, file))
 		i += 1
 
 	program.append(line)
 
-def com_calc_op(op, tok_a, tok_b, is_var):
-	seg = ""
-	if tok_a.name == tok_b.name:
-		if op == PLUS:
-			seg += f"    ;; {tok_a.value} + {tok_b.value}\n"
-			seg += f"    mov rax, [{tok_a.value}]\n"
-			if is_var:
-				seg += f"    mov rbx, [{tok_b.value}]\n"
-			else:
-				seg += f"    mov rbx, {tok_b.value}\n"
-			seg += f"    add rax, rbx\n"
-			seg += f"    mov [{tok_a.value}], rax\n\n"
-			return seg
-		elif op == MINUS:
-			seg += f"    ;; {tok_a.value} - {tok_b.value}\n"
-			seg += f"    mov rax, [{tok_a.value}]\n"
-			if is_var:
-				seg += f"    mov rbx, [{tok_b.value}]\n"
-			else:
-				seg += f"    mov rbx, {tok_b.value}\n"
-			seg += f"    sub rax, rbx\n"
-			seg += f"    mov [{tok_a.value}], rax\n\n"
-			return seg
-		elif op == MULT:
-			seg += f"    ;; {tok_a.value} * {tok_b.value}\n"
-			seg += f"    mov rax, [{tok_a.value}]\n"
-			if is_var:
-				seg += f"    mov rbx, [{tok_b.value}]\n"
-			else:
-				seg += f"    mov rbx, {tok_b.value}\n"
-			seg += f"    mul rbx\n"
-			seg += f"    mov [{tok_a.value}], rax\n\n"
-			return seg
-		elif op == DIV:
-			seg += f"    ;; {tok_a.value} / {tok_b.value}\n"
-			seg += f"    mov rax, [{tok_a.value}]\n"
-			if is_var:
-				seg += f"    mov rbx, [{tok_b.value}]\n"
-			else:
-				seg += f"    mov rbx, {tok_b.value}\n"
-			seg += f"    div rbx\n"
-			seg += f"    mov [{tok_a.value}], rax\n\n"
-			return seg
-		elif op == MOD:
-			seg += f"    ;; {tok_a.value} % {tok_b.value}\n"
-			seg += f"    mov rax, [{tok_a.value}]\n"
-			if is_var:
-				seg += f"    mov rbx, [{tok_b.value}]\n"
-			else:
-				seg += f"    mov rbx, {tok_b.value}\n"
-			seg += f"    div rbx\n"
-			seg += f"    mov [{tok_a.value}], rdx\n\n"
-			return seg
-	else:
-		error(tok_a, f"Cannot perform \"{op}\" operation on \"{tok_a.name}\" and \"{tok_b.name}\"")
-	return seg
+class Slug:
+	def __init__(self, file, program):
+		self.file = file
+		self.asm_file = file.strip(".slug") + ".asm"
+		self.obj_file = file.strip(".slug") + ".o"
+		self.exe_file = file.strip(".slug")
+		self.program = program
 
-def simulate_program(program):
-	token = Token(None, None, 0, 0)
-	error(token, "Simulation mode is not yet implemented.")
-	pass
+		# Segments for assembly
+		self.text_segment = ""
+		self.bss_segment  = ""
+		self.data_segment = ""
+		self.exit_segment = ""
 
-def compile_program(file_name, program):
-	file_name = file_name.strip(".slug") + ".asm"
-	obj_file = file_name.strip(".asm") + ".o"
-	exe_file = file_name.strip(".asm")
-	out_file = open(file_name, "w")
+		# Stacks
+		self.var_stack = {}
+		self.line = []
+		self.assigned_var = None
 
-	# String print function
-	puts_macro =  "%macro puts 2\n"
-	puts_macro += "    mov   eax, 4\n"
-	puts_macro += "    mov   ebx, 1\n"
-	puts_macro += "    mov   ecx, %1\n"
-	puts_macro += "    mov   edx, %2\n"
-	puts_macro += "    int   80h\n"
-	puts_macro += "%endmacro\n"
-
-	# Function to print integers
-	print_func  = "print:\n"
-	print_func += "    push    rbp\n"
-	print_func += "    mov     rbp, rsp\n"
-	print_func += "    sub     rsp, 64\n"
-	print_func += "    mov     DWORD   [rbp-52], edi\n"
-	print_func += "    mov     QWORD   [rbp-8], 0\n"
-	# print_func += "    mov     BYTE   [rbp-17], 10\n"
-	print_func += "    mov     eax, DWORD   [rbp-52]\n"
-	print_func += "    mov     DWORD   [rbp-12], eax\n"
-	print_func += "    cmp     DWORD   [rbp-52], 0\n"
-	print_func += "    jns     .L3\n"
-	print_func += "    neg     DWORD   [rbp-52]\n"
-	print_func += ".L3:\n"
-	print_func += "    mov     edx, DWORD   [rbp-52]\n"
-	print_func += "    movsx   rax, edx\n"
-	print_func += "    imul    rax, rax, 1717986919\n"
-	print_func += "    shr     rax, 32\n"
-	print_func += "    sar     eax, 2\n"
-	print_func += "    mov     esi, edx\n"
-	print_func += "    sar     esi, 31\n"
-	print_func += "    sub     eax, esi\n"
-	print_func += "    mov     ecx, eax\n"
-	print_func += "    mov     eax, ecx\n"
-	print_func += "    sal     eax, 2\n"
-	print_func += "    add     eax, ecx\n"
-	print_func += "    add     eax, eax\n"
-	print_func += "    mov     ecx, edx\n"
-	print_func += "    sub     ecx, eax\n"
-	print_func += "    mov     eax, ecx\n"
-	print_func += "    lea     edx, [rax+48]\n"
-	print_func += "    mov     eax, 31\n"
-	print_func += "    sub     rax, QWORD   [rbp-8]\n"
-	print_func += "    mov     BYTE   [rbp-48+rax], dl\n"
-	print_func += "    mov     eax, DWORD   [rbp-52]\n"
-	print_func += "    movsx   rdx, eax\n"
-	print_func += "    imul    rdx, rdx, 1717986919\n"
-	print_func += "    shr     rdx, 32\n"
-	print_func += "    sar     edx, 2\n"
-	print_func += "    sar     eax, 31\n"
-	print_func += "    mov     ecx, eax\n"
-	print_func += "    mov     eax, edx\n"
-	print_func += "    sub     eax, ecx\n"
-	print_func += "    mov     DWORD   [rbp-52], eax\n"
-	print_func += "    add     QWORD   [rbp-8], 1\n"
-	print_func += "    cmp     DWORD   [rbp-52], 0\n"
-	print_func += "    jne     .L3\n"
-	print_func += "    cmp     DWORD   [rbp-12], 0\n"
-	print_func += "    jns     .L4\n"
-	print_func += "    mov     eax, 31\n"
-	print_func += "    sub     rax, QWORD   [rbp-8]\n"
-	print_func += "    mov     BYTE   [rbp-48+rax], 45\n"
-	print_func += "    add     QWORD   [rbp-8], 1\n"
-	print_func += ".L4:\n"
-	print_func += "    mov     eax, 32\n"
-	print_func += "    sub     rax, QWORD   [rbp-8]\n"
-	print_func += "    lea     rdx, [rbp-48]\n"
-	print_func += "    lea     rcx, [rdx+rax]\n"
-	print_func += "    mov     rax, QWORD   [rbp-8]\n"
-	print_func += "    mov     rdx, rax\n"
-	print_func += "    mov     rsi, rcx\n"
-	print_func += "	   mov     rax, 1\n"
-	print_func += "	   mov	   rdi, 1\n"
-	print_func += "    syscall\n"
-	print_func += "    nop\n"
-	print_func += "    leave\n"
-	print_func += "    ret\n"
-
-	data_segment  = "section .data\n"
-	data_segment += "    nl dw 10\n"
-	bss_segment   = "section .bss\n"
-
-	text_segment  = "section .text\n"
-	text_segment += "    global _start\n"
-	text_segment += "_start:\n"
-
-	exit_segment  =  "exit:\n"
-	exit_segment += "    mov rax, 60\n"
-	exit_segment += "    mov rdi, 0\n"
-	exit_segment += "    syscall\n"
-
-	pc = 0
-	str_cnt = 0
-	var_stack = {}
-	while pc < len(program):
-		line = program[pc]
-		lc = 0
-
-		while lc < len(line):
-			token = line[lc] 
-
-			# When the token is a data type
-			if token.name == DATA_TYPE:
-				type = token.value
-				var_name = line[lc + 1] 
-				lc += 2
-
-				if var_name.name == WORD:
-					if var_name.value not in var_stack:
-						# Creating a new token for variable and saving it in the stack
-						new_token = Token(type, var_name.value, token.row, token.col)
-						var_stack.update({var_name.value: new_token})
-						if type == INT or type == FLOAT:
-							bss_segment += f"    {var_name.value}: resd 32\n"
-						elif type == STR:
-							data_segment += f"    {var_name.value}: dw "
-					else:
-						error(var_name, f"Redeclaration of variable \'{var_name.value}\'")
-				else:
-					error(var_name, f"Cannot create a variable with \'{var_name.name}\' token.")
-
-			# When the token is operator
-			elif token.name == OPERATOR:
-				if token.value == EQUAL:
-					var_name = line[lc - 1].value
-					value    = line[lc + 1:]
-					lc = len(line)
-
-					# Checking if variable is declared or not
-					if var_name not in var_stack:
-						error(token, f"Variable \"{var_name}\" not defined.")
-
-					if len(value) <= 0:
-						error(token, f"Cannot leave the assignment value empty")
-
-					# Going through the value
-					vc = 0
-					var = var_stack[var_name]
-					while vc < len(value):
-						val = value[vc]
-
-						# If assigned value is a variable
-						if val.value in var_stack:
-							new_val = var_stack[val.value]
-							if var.name == new_val.name:
-								text_segment += f"    ;; {var_name} = {new_val.value}\n"
-								text_segment += f"    mov rax, [{new_val.value}]\n"
-								text_segment += f"    mov [{var_name}], rax\n\n"
-								vc +=  1
-							else:
-								error(val, f"Cannot assign \"{val.name}\" to variable with \"{var.name}\" data type.")
-
-						# If the assigned value is a data
-						elif val.name in data_types:
-							if var.name == val.name:
-								if val.name == INT or val.name == FLOAT:
-									text_segment += f"    ;; {var.value} = {val.value}\n"
-									text_segment += f"    mov dword [{var.value}], {val.value}\n"
-								elif val.name == STR:
-									data_segment += f"{val.value}\n"	
-									data_segment += f"    {var.value}_len_6969 equ $ - {var.value}\n"
-									str_cnt += 1
-								vc += 1
-							else:
-								error(val, f"Cannot assign \"{val.name}\" to variable with \"{var.name}\" data type.")
-
-						# If there is operators in the values
-						elif val.value in operators:
-							if vc + 1 == len(value) or vc == 0:
-								error(val, f"\'{val.value}\' operator needs two operands")
-
-							operand = value[vc + 1]
-							vc += 2
-
-							if operand.value in var_stack:
-								text_segment += com_calc_op(val.value, var, var_stack[operand.value], True);
-							else:
-								text_segment += com_calc_op(val.value, var, operand, False);
-
-			elif token.name == WORD:
-				lc += 1
-
-				if token.value not in var_stack:
-					error(token, f"Undefined token \'{token.value}\'")
-
-			elif token.name in KEYWORD:
-				if token.value == PRINT:
-					params = line[lc+1:]
-					lc = len(line)
-					param_idx = 0
-					
-					while param_idx < len(params):
-						val = params[param_idx]
-						
-						if val.name in OPERATOR:
-							error(val, "Cannot use operators in print functions")
-
-						elif val.value == NEW_LINE:
-							text_segment += f"    ;; Newline\n"
-							text_segment += f"    puts nl, 1\n\n"
-							param_idx += 1
-						elif val.value in var_stack:
-							var = var_stack[val.value]
-							if var.name == INT or var.name == FLOAT:
-								text_segment += f"    ;; print {var.value}\n"
-								text_segment += f"    mov rax, [{var.value}]\n"
-								text_segment += f"    push rax\n"
-								text_segment += f"    pop rdi\n"
-								text_segment += f"    call print\n\n"
-							elif var.name == STR:
-								text_segment += f"    ;; Puts {val.value}\n"
-								text_segment += f"    puts {val.value}, {val.value}_len_6969\n\n"
-							param_idx += 1
-						elif val.name in data_types:
-							if val.name == INT or val.name == FLOAT:
-								text_segment += f"    ;; print {val.value}\n"
-								text_segment += f"    mov rax, {val.value}\n"
-								text_segment += f"    push rax\n"
-								text_segment += f"    pop rdi\n"
-								text_segment += f"    call print\n\n"
-							elif val.name == STR:
-								data_segment += f"    str_{str_cnt}: dw {val.value}\n"
-								data_segment += f"    str_{str_cnt}_len_6969 equ $ - str_{str_cnt}\n"
-
-								text_segment += f"    ;; Puts {val.value}\n"
-								text_segment += f"    puts str_{str_cnt}, str_{str_cnt}_len_6969\n\n"
-
-								str_cnt += 1
-							param_idx += 1
-						else:
-							error(val, f"Unknown word \'{val.value}\'");
-		pc += 1
+		# Counters
+		self.prog_cnt = 0
+		self.str_cnt  = 0
+		self.token_cnt = 0
 	
-	out_file.write(puts_macro)
-	out_file.write("\n")
-	out_file.write(print_func)
-	out_file.write("\n")
-	out_file.write(data_segment)
-	out_file.write("\n")
-	out_file.write(bss_segment)
-	out_file.write("\n")
-	out_file.write(text_segment)
-	out_file.write("\n")
-	out_file.write(exit_segment)
+	def simulate(self):
+		token = Token(None, None, 0, 0, self.file)
+		error(token, "Simulation mode is not yet implemented.")
 
-	out_file.close()
+	""" Compilation instructions """
+	def __create_var(self, type):
+		token = self.line[self.token_cnt]
+		variable = Token(type, token.value, token.row, token.col, token.file)
 
-	# Compiling the program
-	os.system(f"nasm -felf64 {file_name}")
-	os.system(f"ld -o {exe_file} {obj_file}")
-	print(f"nasm -felf64 {file_name}")
-	print(f"ld -o {exe_file} {obj_file}")
+		# Checking if the variable is already declared
+		if variable.value in self.var_stack:
+			error(variable, f"Variable `{variable.value}` is already defined.")
+		if token.name != WORD:
+			error(token, f"Cannot create a variable with `{token.name}` token.")
+
+		# Generating assembly
+		if type == INT or type == FLOAT:
+			self.bss_segment  += f"    {variable.value}: resd 32\n"
+		elif type == STR:
+			self.data_segment += f"    {variable.value}: dw "
+
+		self.var_stack.update({variable.value: variable})
+	
+	def __assign_var(self, value):
+		if self.assigned_var.name != value.name:
+			error(value, f"Cannot assign `{value.name}` to the variable with `{self.assigned_var.name}` type.")
+		
+		if value.value not in self.var_stack:
+			if value.name == INT or value.name == FLOAT:
+				self.text_segment += f"    ;; {self.assigned_var.value} = {value.value}\n"
+				self.text_segment += f"    mov dword [{self.assigned_var.value}], {value.value}\n"
+			elif value.name == STR:
+				self.data_segment += f"{value.value}\n"	
+				self.data_segment += f"    {value.value}_len_6969 equ $ - {var.value}\n"
+				self.str_cnt += 1
+		else:
+			self.text_segment += f"    ;; {self.assigned_var.value} = {value.value}\n"
+			self.text_segment += f"    mov rax, [{value.value}]\n"
+			self.text_segment += f"    mov [{self.assigned_var.value}], rax\n"
+	
+	""" Arthimetic operation """
+	def __plus(self, tok_a, tok_b):
+		type_a = type_b = None
+		self.text_segment += f"    ;; {tok_a.value} + {tok_b.value}\n"
+
+		# Copying the first data into register
+		if tok_a.value in self.var_stack:
+			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			type_a = self.var_stack[tok_a.value].name
+		elif tok_a.name in data_types:
+			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			type_a = tok_a.name
+		else:
+			error(tok_a, f"Unknown word `{tok_a.value}` used for plus operation.")
+
+		# Copying the second data into register
+		if tok_b.value in self.var_stack:
+			self.text_segment += f"    mov rbx, [{tok_b.value}]\n"
+			type_b = self.var_stack[tok_b.value].name
+		elif tok_b.name in data_types:
+			self.text_segment += f"    mov rbx, {tok_b.value}\n"
+			type_b = tok_b.name
+		else:
+			error(tok_b, f"Unknown word `{tok_b.value}` used for plus operation.")
+
+		# Adding them both
+		self.text_segment += f"    add rax, rbx\n"
+		
+		# If there is a assigned variable then storing in that else pushing it into stack
+		if self.assigned_var:
+			self.text_segment += f"    mov [{self.assigned_var.value}], rax\n"
+		else:
+			self.text_segment += f"    push rax\n"
+
+		# Type checking
+		if type_a != type_b:
+			error(tok_b, f"Cannot use `+` operation between types `{type_a}` and `{type_b}`.")
+
+	def __minus(self, tok_a, tok_b):
+		type_a = type_b = None
+		self.text_segment += f"    ;; {tok_a.value} - {tok_b.value}\n"
+
+		# Copying the first data into register
+		if tok_a.value in self.var_stack:
+			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			type_a = self.var_stack[tok_a.value].name
+		elif tok_a.name in data_types:
+			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			type_a = tok_a.name
+		else:
+			error(tok_a, f"Unknown word `{tok_a.value}` used for minus operation.")
+
+		# Copying the second data into register
+		if tok_b.value in self.var_stack:
+			self.text_segment += f"    mov rbx, [{tok_b.value}]\n"
+			type_b = self.var_stack[tok_b.value].name
+		elif tok_b.name in data_types:
+			self.text_segment += f"    mov rbx, {tok_b.value}\n"
+			type_b = tok_b.name
+		else:
+			error(tok_b, f"Unknown word `{tok_b.value}` used for minus operation.")
+
+		# Adding them both
+		self.text_segment += f"    sub rax, rbx\n"
+		
+		# If there is a assigned variable then storing in that else pushing it into stack
+		if self.assigned_var:
+			self.text_segment += f"    mov [{self.assigned_var.value}], rax\n"
+		else:
+			self.text_segment += f"    push rax\n"
+
+		# Type checking
+		if type_a != type_b:
+			error(tok_b, f"Cannot use `-` operation between types `{type_a}` and `{type_b}`.")
+
+	def __mult(self, tok_a, tok_b):
+		type_a = type_b = None
+		self.text_segment += f"    ;; {tok_a.value} * {tok_b.value}\n"
+
+		# Copying the first data into register
+		if tok_a.value in self.var_stack:
+			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			type_a = self.var_stack[tok_a.value].name
+		elif tok_a.name in data_types:
+			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			type_a = tok_a.name
+		else:
+			error(tok_a, f"Unknown word `{tok_a.value}` used for multiply operation.")
+
+		# Copying the second data into register
+		if tok_b.value in self.var_stack:
+			self.text_segment += f"    mov rbx, [{tok_b.value}]\n"
+			type_b = self.var_stack[tok_b.value].name
+		elif tok_b.name in data_types:
+			self.text_segment += f"    mov rbx, {tok_b.value}\n"
+			type_b = tok_b.name
+		else:
+			error(tok_b, f"Unknown word `{tok_b.value}` used for multiply operation.")
+
+		# Adding them both
+		self.text_segment += f"    mul rbx\n"
+		
+		# If there is a assigned variable then storing in that else pushing it into stack
+		if self.assigned_var:
+			self.text_segment += f"    mov [{self.assigned_var.value}], rax\n"
+		else:
+			self.text_segment += f"    push rax\n"
+
+		# Type checking
+		if type_a != type_b:
+			error(tok_b, f"Cannot use `*` operation between types `{type_a}` and `{type_b}`.")
+
+	def __div(self, tok_a, tok_b):
+		type_a = type_b = None
+		self.text_segment += f"    ;; {tok_a.value} / {tok_b.value}\n"
+
+		# Copying the first data into register
+		if tok_a.value in self.var_stack:
+			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			type_a = self.var_stack[tok_a.value].name
+		elif tok_a.name in data_types:
+			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			type_a = tok_a.name
+		else:
+			error(tok_a, f"Unknown word `{tok_a.value}` used for divide operation.")
+
+		# Copying the second data into register
+		if tok_b.value in self.var_stack:
+			self.text_segment += f"    mov rbx, [{tok_b.value}]\n"
+			type_b = self.var_stack[tok_b.value].name
+		elif tok_b.name in data_types:
+			self.text_segment += f"    mov rbx, {tok_b.value}\n"
+			type_b = tok_b.name
+		else:
+			error(tok_b, f"Unknown word `{tok_b.value}` used for divide operation.")
+
+		# Adding them both
+		self.text_segment += f"    div rbx\n"
+		
+		# If there is a assigned variable then storing in that else pushing it into stack
+		if self.assigned_var:
+			self.text_segment += f"    mov [{self.assigned_var.value}], rax\n"
+		else:
+			self.text_segment += f"    push rax\n"
+
+		# Type checking
+		if type_a != type_b:
+			error(tok_b, f"Cannot use `/` operation between types `{type_a}` and `{type_b}`.")
+
+	def __mod(self, tok_a, tok_b):
+		type_a = type_b = None
+		self.text_segment += f"    ;; {tok_a.value} % {tok_b.value}\n"
+
+		# Copying the first data into register
+		if tok_a.value in self.var_stack:
+			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			type_a = self.var_stack[tok_a.value].name
+		elif tok_a.name in data_types:
+			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			type_a = tok_a.name
+		else:
+			error(tok_a, f"Unknown word `{tok_a.value}` used for modular division operation.")
+
+		# Copying the second data into register
+		if tok_b.value in self.var_stack:
+			self.text_segment += f"    mov rbx, [{tok_b.value}]\n"
+			type_b = self.var_stack[tok_b.value].name
+		elif tok_b.name in data_types:
+			self.text_segment += f"    mov rbx, {tok_b.value}\n"
+			type_b = tok_b.name
+		else:
+			error(tok_b, f"Unknown word `{tok_b.value}` used for modular division operation.")
+
+		# Adding them both
+		self.text_segment += f"    div rbx\n"
+		
+		# If there is a assigned variable then storing in that else pushing it into stack
+		if self.assigned_var:
+			self.text_segment += f"    mov [{self.assigned_var.value}], rdx\n"
+		else:
+			self.text_segment += f"    push rdx\n"
+
+		# Type checking
+		if type_a != type_b:
+			error(tok_b, f"Cannot use `/` operation between types `{type_a}` and `{type_b}`.")
+
+	def __equal(self, tok_a, tok_b):
+		self.text_segment += f"    {tok_a.value} == {tok_b.value}\n"
+		self.text_segment += f"    mov rcx, 0\n"
+		self.text_segment += f"    mov rdx, 1\n"
+		self.text_segment += f"    pop rax\n"
+		self.text_segment += f"    pop rbx\n"
+		self.text_semgnet += f"    cmp rax, rbx\n"
+		self.text_segment += f"    cmove rcx, rdx\n"
+		self.text_segment += f"    push rcx\n"
+
+	def compile(self):
+		self.data_segment  = "section .data\n"
+		self.data_segment += "    nl dw 10\n"
+		self.bss_segment   = "section .bss\n"
+
+		self.text_segment  = "section .text\n"
+		self.text_segment += "    global _start\n"
+		self.text_segment += "_start:\n"
+
+		self.exit_segment  =  "exit:\n"
+		self.exit_segment += "    mov rax, 60\n"
+		self.exit_segment += "    mov rdi, 0\n"
+		self.exit_segment += "    syscall\n"
+
+		while self.prog_cnt < len(self.program):
+			self.line = self.program[self.prog_cnt]
+			self.prog_cnt += 1
+			self.token_cnt = 0
+			self.assigned_var = None
+
+			while self.token_cnt < len(self.line):
+				token = self.line[self.token_cnt]
+				print(token)
+
+				if token.name == DATA_TYPE:
+					self.token_cnt += 1
+					self.__create_var(token.value) # Giving the data type to create variable
+
+				elif token.name == WORD:
+					self.token_cnt += 1
+					if self.assigned_var:
+						if token.value in self.var_stack:
+							self.__assign_var(self.var_stack[token.value])
+						else:
+							error(token, f"Invalid syntax.")
+
+				elif token.name in data_types:
+					self.token_cnt += 1
+					if self.assigned_var:
+						self.__assign_var(token)	
+
+				elif token.name == OPERATOR:
+					if self.token_cnt + 1 == len(self.line):
+						error(token, f"`{token.value}` operater requires two operand.")
+
+					if token.value == ASSIGN:
+						self.assigned_var = self.line[self.token_cnt - 1]
+						if self.assigned_var.value not in self.var_stack:
+							error(self.assigned_var, f"Undefined variable `{self.assigned_var.value}`.")
+
+						self.assigned_var = self.var_stack[self.assigned_var.value]
+						self.token_cnt += 1
+
+					elif token.value == PLUS:
+						tok_a = self.line[self.token_cnt - 1]
+						tok_b = self.line[self.token_cnt + 1]
+						self.token_cnt += 2
+						if self.assigned_var:
+							self.__plus(self.assigned_var, tok_b)
+						else:
+							self.__plus(tok_a, tok_b)
+
+					elif token.value == MINUS:
+						tok_a = self.line[self.token_cnt - 1]
+						tok_b = self.line[self.token_cnt + 1]
+						self.token_cnt += 2
+						if self.assigned_var:
+							self.__minus(self.assigned_var, tok_b)
+						else:
+							self.__minus(tok_a, tok_b)
+
+					elif token.value == MULT:
+						tok_a = self.line[self.token_cnt - 1]
+						tok_b = self.line[self.token_cnt + 1]
+						self.token_cnt += 2
+						if self.assigned_var:
+							self.__mult(self.assigned_var, tok_b)
+						else:
+							self.__mult(tok_a, tok_b)
+
+					elif token.value == DIV:
+						tok_a = self.line[self.token_cnt - 1]
+						tok_b = self.line[self.token_cnt + 1]
+						self.token_cnt += 2
+						if self.assigned_var:
+							self.__div(self.assigned_var, tok_b)
+						else:
+							self.__div(tok_a, tok_b)
+
+					elif token.value == MOD:
+						tok_a = self.line[self.token_cnt - 1]
+						tok_b = self.line[self.token_cnt + 1]
+						self.token_cnt += 2
+						if self.assigned_var:
+							self.__mod(self.assigned_var, tok_b)
+						else:
+							self.__mod(tok_a, tok_b)
+
+					elif token.value == EQUAL:
+						self.token_cnt += 2
+						self.__equal()
+
+				elif token.name == KEYWORD:
+					self.token_cnt += 1
+
+		self.__save()
+	
+	def __save(self):
+		# String print function
+		puts_macro =  "%macro puts 2\n"
+		puts_macro += "    mov   eax, 4\n"
+		puts_macro += "    mov   ebx, 1\n"
+		puts_macro += "    mov   ecx, %1\n"
+		puts_macro += "    mov   edx, %2\n"
+		puts_macro += "    int   80h\n"
+		puts_macro += "%endmacro\n"
+
+		# Function to print integers
+		print_func  = "print:\n"
+		print_func += "    push    rbp\n"
+		print_func += "    mov     rbp, rsp\n"
+		print_func += "    sub     rsp, 64\n"
+		print_func += "    mov     DWORD   [rbp-52], edi\n"
+		print_func += "    mov     QWORD   [rbp-8], 0\n"
+		# print_func += "    mov     BYTE   [rbp-17], 10\n"
+		print_func += "    mov     eax, DWORD   [rbp-52]\n"
+		print_func += "    mov     DWORD   [rbp-12], eax\n"
+		print_func += "    cmp     DWORD   [rbp-52], 0\n"
+		print_func += "    jns     .L3\n"
+		print_func += "    neg     DWORD   [rbp-52]\n"
+		print_func += ".L3:\n"
+		print_func += "    mov     edx, DWORD   [rbp-52]\n"
+		print_func += "    movsx   rax, edx\n"
+		print_func += "    imul    rax, rax, 1717986919\n"
+		print_func += "    shr     rax, 32\n"
+		print_func += "    sar     eax, 2\n"
+		print_func += "    mov     esi, edx\n"
+		print_func += "    sar     esi, 31\n"
+		print_func += "    sub     eax, esi\n"
+		print_func += "    mov     ecx, eax\n"
+		print_func += "    mov     eax, ecx\n"
+		print_func += "    sal     eax, 2\n"
+		print_func += "    add     eax, ecx\n"
+		print_func += "    add     eax, eax\n"
+		print_func += "    mov     ecx, edx\n"
+		print_func += "    sub     ecx, eax\n"
+		print_func += "    mov     eax, ecx\n"
+		print_func += "    lea     edx, [rax+48]\n"
+		print_func += "    mov     eax, 31\n"
+		print_func += "    sub     rax, QWORD   [rbp-8]\n"
+		print_func += "    mov     BYTE   [rbp-48+rax], dl\n"
+		print_func += "    mov     eax, DWORD   [rbp-52]\n"
+		print_func += "    movsx   rdx, eax\n"
+		print_func += "    imul    rdx, rdx, 1717986919\n"
+		print_func += "    shr     rdx, 32\n"
+		print_func += "    sar     edx, 2\n"
+		print_func += "    sar     eax, 31\n"
+		print_func += "    mov     ecx, eax\n"
+		print_func += "    mov     eax, edx\n"
+		print_func += "    sub     eax, ecx\n"
+		print_func += "    mov     DWORD   [rbp-52], eax\n"
+		print_func += "    add     QWORD   [rbp-8], 1\n"
+		print_func += "    cmp     DWORD   [rbp-52], 0\n"
+		print_func += "    jne     .L3\n"
+		print_func += "    cmp     DWORD   [rbp-12], 0\n"
+		print_func += "    jns     .L4\n"
+		print_func += "    mov     eax, 31\n"
+		print_func += "    sub     rax, QWORD   [rbp-8]\n"
+		print_func += "    mov     BYTE   [rbp-48+rax], 45\n"
+		print_func += "    add     QWORD   [rbp-8], 1\n"
+		print_func += ".L4:\n"
+		print_func += "    mov     eax, 32\n"
+		print_func += "    sub     rax, QWORD   [rbp-8]\n"
+		print_func += "    lea     rdx, [rbp-48]\n"
+		print_func += "    lea     rcx, [rdx+rax]\n"
+		print_func += "    mov     rax, QWORD   [rbp-8]\n"
+		print_func += "    mov     rdx, rax\n"
+		print_func += "    mov     rsi, rcx\n"
+		print_func += "	   mov     rax, 1\n"
+		print_func += "	   mov	   rdi, 1\n"
+		print_func += "    syscall\n"
+		print_func += "    nop\n"
+		print_func += "    leave\n"
+		print_func += "    ret\n"
+
+		# Writing into assembly file
+		self.out_file = open(self.asm_file, "w")
+		self.out_file.write(puts_macro)
+		self.out_file.write("\n")
+		self.out_file.write(print_func)
+		self.out_file.write("\n")
+		self.out_file.write(self.data_segment)
+		self.out_file.write("\n")
+		self.out_file.write(self.bss_segment)
+		self.out_file.write("\n")
+		self.out_file.write(self.text_segment)
+		self.out_file.write("\n")
+		self.out_file.write(self.exit_segment)
+		self.out_file.close()
+
+		# Compiling the program
+		os.system(f"nasm -felf64 {self.asm_file}")
+		os.system(f"ld -o {self.exe_file} {self.obj_file}")
+		print(f"nasm -felf64 {self.asm_file}")
+		print(f"ld -o {self.exe_file} {self.obj_file}")
+
 
 def usage():
 	print("Usage: slug [mode] [file_name]")
@@ -461,12 +610,13 @@ if __name__ == "__main__":
 	program = []
 	row = 1
 	for line in code:
-		words = split_by_delim(line) 
+		words = chop_word(line, file) 
 		create_token(program, words)
 		row += 1
 	
-	print(program)
+	slug = Slug(file, program)
 	if mode == "sim":
-		simulate_program(program)
+		slug.simulate()
 	elif mode == "com":
-		compile_program(file, program)
+		slug.compile()
+
