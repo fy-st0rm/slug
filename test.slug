@@ -1,5 +1,16 @@
-int a = 34
-int b = 35
-int c = a + b
-print "What is " a " + " b " is?" ,
-print "It is " c " B)" ,
+int a = 10
+int b = 20 
+int c = a + b 
+int d = a - b 
+int e = a * b
+int f = b / a
+int g = a % b
+
+print "A = " a ,
+print "B = " b ,
+print a " + " b " = " c ,
+print a " - " b " = " d ,
+print a " * " b " = " e ,
+print a " / " b " = " f ,
+print a " % " b " = " g ,
+

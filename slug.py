@@ -1,8 +1,10 @@
 import sys
 import os
 
-#TODO: [ ] Properly parse the strings
+#TODO: [X] Create a proper parser
+#TODO: [X] Proper error handling
 #TODO: [ ] If statements
+#TODO: [ ] implement functions 
 
 WORD = "word"
 VAR = "variable"
@@ -19,18 +21,24 @@ PLUS  = "+"
 MINUS = "-"
 MULT  = "*"
 DIV   = "/"
+MOD   = "%"
 EQUAL = "="
 OPERATOR = "operator"
-operators = [EQUAL, PLUS, MINUS, MULT, DIV]
+operators = [EQUAL, PLUS, MINUS, MULT, DIV, MOD]
 
 # Special keywords 
-PRINT = "print"
+PRINT    = "print"
 NEW_LINE = ","
-KEYWORD = "keyword"
-keywords = [PRINT, NEW_LINE]
+IF       = "if"
+THEN     = "then"
+ELSE     = "else"
+END      = "end"
+KEYWORD  = "keyword"
+keywords = [PRINT, NEW_LINE, IF, THEN, ELSE, END]
 
-def error(msg):
-	assert False, msg
+def error(token, msg):
+	print(f"\033[91mError: {file}\033[0m:{str(token.row)}:{str(token.col)}: {msg}", file=sys.stderr)
+	exit(1)
 
 def is_float(val):
 	try:
@@ -40,39 +48,77 @@ def is_float(val):
 		return False
 
 class Token:
-	def __init__(self, name, value):
+	def __init__(self, name, value, row, col):
 		self.name = name
 		self.value = value
+		self.row = row
+		self.col = col
 	
 	def __repr__(self):
 		return f"TOKEN({self.name}, {self.value})"
 
+def split_by_delim(line):
+	word = ""
+	words = []
+	i = 0
+	col = 0
+	str_start = False
+
+	row = line[0] + 1
+	line = line[1] 
+	while i < len(line):
+		ch = line[i]
+
+		# Parsing the stings
+		if ch == "\"":
+			word += ch
+			if str_start:
+				str_start = False
+				words.append((row, col, word))
+				col += len(word) + 1
+				word = ""
+			else:
+				str_start = True
+
+		# Splitting according to the space or tab
+		elif (ch == " " or ch == "\t" or ch == "\n") and not str_start:
+			if word:
+				words.append((row, col, word))
+			col += len(word) + 1
+			word = ""
+
+		# Adding the character
+		else:
+			word += ch
+		i += 1
+
+	return words
+
 def create_token(program, words):
 	i = 0
 	line = []
+
+	# Removing the free spaces
+	words = list(filter(bool, words))
 	while i < len(words):
-		if words[i] in data_types:
-			line.append(Token(DATA_TYPE, words[i]))
-		elif words[i] in operators:
-			line.append(Token(OPERATOR, words[i]))
-		elif words[i].isdigit():
-			line.append(Token(INT, words[i]))
-		elif is_float(words[i]):
-			line.append(Token(FLOAT, words[i]))
-		elif words[i][0] == "\"" and words[i][-1] == "\"" and len(words[i]) > 1:
-			line.append(Token(STR, words[i]))
-		elif words[i][0] == "\"":
-			word = words[i] 
-			i += 1
-			word += " " + words[i]
-			while word[-1] != "\"":
-				i += 1
-				word += " " + words[i]
-			line.append(Token(STR, word))
-		elif words[i] in keywords:
-			line.append(Token(KEYWORD, words[i]))
+		row = words[i][0]
+		col = words[i][1]
+		word = words[i][2]
+
+		if word in data_types:
+			line.append(Token(DATA_TYPE, word, row, col))
+		elif word in operators:
+			line.append(Token(OPERATOR, word, row, col))
+		elif word.isdigit():
+			line.append(Token(INT, word, row, col))
+		elif is_float(word):
+			line.append(Token(FLOAT, word, row, col))
+		elif word[0] == "\"" and word[-1] == "\"" and len(word) > 1:
+			line.append(Token(STR, word, row, col))
+		elif word in keywords:
+			line.append(Token(KEYWORD, word, row, col))
 		else:
-			line.append(Token(WORD, words[i]))
+			line.append(Token(WORD, word, row, col))
 		i += 1
 
 	program.append(line)
@@ -90,11 +136,53 @@ def com_calc_op(op, tok_a, tok_b, is_var):
 			seg += f"    add rax, rbx\n"
 			seg += f"    mov [{tok_a.value}], rax\n\n"
 			return seg
+		elif op == MINUS:
+			seg += f"    ;; {tok_a.value} - {tok_b.value}\n"
+			seg += f"    mov rax, [{tok_a.value}]\n"
+			if is_var:
+				seg += f"    mov rbx, [{tok_b.value}]\n"
+			else:
+				seg += f"    mov rbx, {tok_b.value}\n"
+			seg += f"    sub rax, rbx\n"
+			seg += f"    mov [{tok_a.value}], rax\n\n"
+			return seg
+		elif op == MULT:
+			seg += f"    ;; {tok_a.value} * {tok_b.value}\n"
+			seg += f"    mov rax, [{tok_a.value}]\n"
+			if is_var:
+				seg += f"    mov rbx, [{tok_b.value}]\n"
+			else:
+				seg += f"    mov rbx, {tok_b.value}\n"
+			seg += f"    mul rbx\n"
+			seg += f"    mov [{tok_a.value}], rax\n\n"
+			return seg
+		elif op == DIV:
+			seg += f"    ;; {tok_a.value} / {tok_b.value}\n"
+			seg += f"    mov rax, [{tok_a.value}]\n"
+			if is_var:
+				seg += f"    mov rbx, [{tok_b.value}]\n"
+			else:
+				seg += f"    mov rbx, {tok_b.value}\n"
+			seg += f"    div rbx\n"
+			seg += f"    mov [{tok_a.value}], rax\n\n"
+			return seg
+		elif op == MOD:
+			seg += f"    ;; {tok_a.value} % {tok_b.value}\n"
+			seg += f"    mov rax, [{tok_a.value}]\n"
+			if is_var:
+				seg += f"    mov rbx, [{tok_b.value}]\n"
+			else:
+				seg += f"    mov rbx, {tok_b.value}\n"
+			seg += f"    div rbx\n"
+			seg += f"    mov [{tok_a.value}], rdx\n\n"
+			return seg
 	else:
-		error(f"Cannot perform \"{op}\" operation on \"{tok_a.name}\" and \"{tok_b.name}\"")
-
+		error(tok_a, f"Cannot perform \"{op}\" operation on \"{tok_a.name}\" and \"{tok_b.name}\"")
+	return seg
 
 def simulate_program(program):
+	token = Token(None, None, 0, 0)
+	error(token, "Simulation mode is not yet implemented.")
 	pass
 
 def compile_program(file_name, program):
@@ -114,38 +202,70 @@ def compile_program(file_name, program):
 
 	# Function to print integers
 	print_func  = "print:\n"
-	print_func += "    mov     r9, -3689348814741910323\n"
-	print_func += "    sub     rsp, 40\n"
-	# print_func += "    mov     BYTE [rsp+31], 10\n"
-	print_func += "    lea     rcx, [rsp+30]\n"
-	print_func += ".L2:\n"
-	print_func += "    mov     rax, rdi     \n"
-	print_func += "    lea     r8, [rsp+32]\n"
-	print_func += "    mul     r9\n"
-	print_func += "    mov     rax, rdi\n"
-	print_func += "    sub     r8, rcx\n"   
-	print_func += "    shr     rdx, 3\n"    
-	print_func += "    lea     rsi, [rdx+rdx*4]\n"
-	print_func += "    add     rsi, rsi\n"
-	print_func += "    sub     rax, rsi\n"
-	print_func += "    add     eax, 48\n"  
-	print_func += "    mov     BYTE [rcx], al\n"
-	print_func += "    mov     rax, rdi\n"
-	print_func += "    mov     rdi, rdx\n"
-	print_func += "    mov     rdx, rcx\n"
-	print_func += "    sub     rcx, 1\n"
-	print_func += "    cmp     rax, 9\n"
-	print_func += "    ja      .L2\n"
-	print_func += "    lea     rax, [rsp+32]\n"
-	print_func += "    mov     edi, 1\n"
-	print_func += "    sub     rdx, rax\n"
-	print_func += "    xor     eax, eax\n"
-	print_func += "    lea     rsi, [rsp+32+rdx]\n"
-	print_func += "    mov     rdx, r8\n"
-	print_func += "    mov     rax, 1\n"
+	print_func += "    push    rbp\n"
+	print_func += "    mov     rbp, rsp\n"
+	print_func += "    sub     rsp, 64\n"
+	print_func += "    mov     DWORD   [rbp-52], edi\n"
+	print_func += "    mov     QWORD   [rbp-8], 0\n"
+	# print_func += "    mov     BYTE   [rbp-17], 10\n"
+	print_func += "    mov     eax, DWORD   [rbp-52]\n"
+	print_func += "    mov     DWORD   [rbp-12], eax\n"
+	print_func += "    cmp     DWORD   [rbp-52], 0\n"
+	print_func += "    jns     .L3\n"
+	print_func += "    neg     DWORD   [rbp-52]\n"
+	print_func += ".L3:\n"
+	print_func += "    mov     edx, DWORD   [rbp-52]\n"
+	print_func += "    movsx   rax, edx\n"
+	print_func += "    imul    rax, rax, 1717986919\n"
+	print_func += "    shr     rax, 32\n"
+	print_func += "    sar     eax, 2\n"
+	print_func += "    mov     esi, edx\n"
+	print_func += "    sar     esi, 31\n"
+	print_func += "    sub     eax, esi\n"
+	print_func += "    mov     ecx, eax\n"
+	print_func += "    mov     eax, ecx\n"
+	print_func += "    sal     eax, 2\n"
+	print_func += "    add     eax, ecx\n"
+	print_func += "    add     eax, eax\n"
+	print_func += "    mov     ecx, edx\n"
+	print_func += "    sub     ecx, eax\n"
+	print_func += "    mov     eax, ecx\n"
+	print_func += "    lea     edx, [rax+48]\n"
+	print_func += "    mov     eax, 31\n"
+	print_func += "    sub     rax, QWORD   [rbp-8]\n"
+	print_func += "    mov     BYTE   [rbp-48+rax], dl\n"
+	print_func += "    mov     eax, DWORD   [rbp-52]\n"
+	print_func += "    movsx   rdx, eax\n"
+	print_func += "    imul    rdx, rdx, 1717986919\n"
+	print_func += "    shr     rdx, 32\n"
+	print_func += "    sar     edx, 2\n"
+	print_func += "    sar     eax, 31\n"
+	print_func += "    mov     ecx, eax\n"
+	print_func += "    mov     eax, edx\n"
+	print_func += "    sub     eax, ecx\n"
+	print_func += "    mov     DWORD   [rbp-52], eax\n"
+	print_func += "    add     QWORD   [rbp-8], 1\n"
+	print_func += "    cmp     DWORD   [rbp-52], 0\n"
+	print_func += "    jne     .L3\n"
+	print_func += "    cmp     DWORD   [rbp-12], 0\n"
+	print_func += "    jns     .L4\n"
+	print_func += "    mov     eax, 31\n"
+	print_func += "    sub     rax, QWORD   [rbp-8]\n"
+	print_func += "    mov     BYTE   [rbp-48+rax], 45\n"
+	print_func += "    add     QWORD   [rbp-8], 1\n"
+	print_func += ".L4:\n"
+	print_func += "    mov     eax, 32\n"
+	print_func += "    sub     rax, QWORD   [rbp-8]\n"
+	print_func += "    lea     rdx, [rbp-48]\n"
+	print_func += "    lea     rcx, [rdx+rax]\n"
+	print_func += "    mov     rax, QWORD   [rbp-8]\n"
+	print_func += "    mov     rdx, rax\n"
+	print_func += "    mov     rsi, rcx\n"
+	print_func += "	   mov     rax, 1\n"
+	print_func += "	   mov	   rdi, 1\n"
 	print_func += "    syscall\n"
-	print_func += "    add     rsp, 40\n"
-	print_func += "    mov rax, [rsp + 32 + rdx]\n"
+	print_func += "    nop\n"
+	print_func += "    leave\n"
 	print_func += "    ret\n"
 
 	data_segment  = "section .data\n"
@@ -178,15 +298,18 @@ def compile_program(file_name, program):
 				lc += 2
 
 				if var_name.name == WORD:
-					# Creating a new token for variable and saving it in the stack
-					new_token = Token(type, var_name.value)
-					var_stack.update({var_name.value: new_token})
-					if type == INT or type == FLOAT:
-						bss_segment += f"    {var_name.value}: resb 32\n"
-					elif type == STR:
-						data_segment += f"    {var_name.value}: dw "
+					if var_name.value not in var_stack:
+						# Creating a new token for variable and saving it in the stack
+						new_token = Token(type, var_name.value, token.row, token.col)
+						var_stack.update({var_name.value: new_token})
+						if type == INT or type == FLOAT:
+							bss_segment += f"    {var_name.value}: resd 32\n"
+						elif type == STR:
+							data_segment += f"    {var_name.value}: dw "
+					else:
+						error(var_name, f"Redeclaration of variable \'{var_name.value}\'")
 				else:
-					error(f"Cannot create a variable with \'{var_name.name}\' token.")
+					error(var_name, f"Cannot create a variable with \'{var_name.name}\' token.")
 
 			# When the token is operator
 			elif token.name == OPERATOR:
@@ -197,10 +320,10 @@ def compile_program(file_name, program):
 
 					# Checking if variable is declared or not
 					if var_name not in var_stack:
-						error(f"Variable \"{var_name}\" not defined.")
+						error(token, f"Variable \"{var_name}\" not defined.")
 
 					if len(value) <= 0:
-						error(f"Cannot leave the assignment value empty")
+						error(token, f"Cannot leave the assignment value empty")
 
 					# Going through the value
 					vc = 0
@@ -217,26 +340,27 @@ def compile_program(file_name, program):
 								text_segment += f"    mov [{var_name}], rax\n\n"
 								vc +=  1
 							else:
-								error(f"Cannot assign \"{val.name}\" to variable with \"{var.name}\" data type.")
+								error(val, f"Cannot assign \"{val.name}\" to variable with \"{var.name}\" data type.")
 
 						# If the assigned value is a data
 						elif val.name in data_types:
 							if var.name == val.name:
 								if val.name == INT or val.name == FLOAT:
 									text_segment += f"    ;; {var.value} = {val.value}\n"
-									text_segment += f"    mov byte [{var.value}], {val.value}\n"
+									text_segment += f"    mov dword [{var.value}], {val.value}\n"
 								elif val.name == STR:
 									data_segment += f"{val.value}\n"	
 									data_segment += f"    {var.value}_len_6969 equ $ - {var.value}\n"
 									str_cnt += 1
 								vc += 1
 							else:
-								error(f"Cannot assign \"{val.name}\" to variable with \"{var.name}\" data type.")
+								error(val, f"Cannot assign \"{val.name}\" to variable with \"{var.name}\" data type.")
 
 						# If there is operators in the values
-						elif val.value == PLUS:
-							if vc + 1 == len(value):
-								error("Plus operator needs operands")
+						elif val.value in operators:
+							if vc + 1 == len(value) or vc == 0:
+								error(val, f"\'{val.value}\' operator needs two operands")
+
 							operand = value[vc + 1]
 							vc += 2
 
@@ -244,6 +368,12 @@ def compile_program(file_name, program):
 								text_segment += com_calc_op(val.value, var, var_stack[operand.value], True);
 							else:
 								text_segment += com_calc_op(val.value, var, operand, False);
+
+			elif token.name == WORD:
+				lc += 1
+
+				if token.value not in var_stack:
+					error(token, f"Undefined token \'{token.value}\'")
 
 			elif token.name in KEYWORD:
 				if token.value == PRINT:
@@ -255,7 +385,7 @@ def compile_program(file_name, program):
 						val = params[param_idx]
 						
 						if val.name in OPERATOR:
-							error("Cannot use operators in print functions")
+							error(val, "Cannot use operators in print functions")
 
 						elif val.value == NEW_LINE:
 							text_segment += f"    ;; Newline\n"
@@ -290,8 +420,7 @@ def compile_program(file_name, program):
 								str_cnt += 1
 							param_idx += 1
 						else:
-							error(f"Unknown word \'{val.value}\'");
-
+							error(val, f"Unknown word \'{val.value}\'");
 		pc += 1
 	
 	out_file.write(puts_macro)
@@ -327,12 +456,17 @@ if __name__ == "__main__":
 	mode = sys.argv[1]
 	file = sys.argv[2]
 	with open(file, "r") as f:
-		code = f.readlines()
+		code = list(enumerate(f.readlines()))
 	
 	program = []
+	row = 1
 	for line in code:
-		words = line.split()
+		words = split_by_delim(line) 
 		create_token(program, words)
+		row += 1
 	
-	if mode == "com":
+	print(program)
+	if mode == "sim":
+		simulate_program(program)
+	elif mode == "com":
 		compile_program(file, program)
