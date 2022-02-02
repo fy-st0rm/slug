@@ -384,6 +384,49 @@ class Slug:
 		self.text_semgnet += f"    cmp rax, rbx\n"
 		self.text_segment += f"    cmove rcx, rdx\n"
 		self.text_segment += f"    push rcx\n"
+	
+	""" Special keywords """
+	def __print(self, params):
+		param_idx = 0
+		while param_idx < len(params):
+			val = params[param_idx]
+			
+			if val.name in OPERATOR:
+				error(val, "Cannot use operators in print functions")
+			elif val.value == NEW_LINE:
+				self.text_segment += f"    ;; Newline\n"
+				self.text_segment += f"    puts nl, 1\n\n"
+				param_idx += 1
+			elif val.value in self.var_stack:
+				var = self.var_stack[val.value]
+				if var.name == INT or var.name == FLOAT:
+					self.text_segment += f"    ;; print {var.value}\n"
+					self.text_segment += f"    mov rax, [{var.value}]\n"
+					self.text_segment += f"    push rax\n"
+					self.text_segment += f"    pop rdi\n"
+					self.text_segment += f"    call print\n\n"
+				elif var.name == STR:
+					self.text_segment += f"    ;; Puts {val.value}\n"
+					self.text_segment += f"    puts {val.value}, {val.value}_len_6969\n\n"
+				param_idx += 1
+			elif val.name in data_types:
+				if val.name == INT or val.name == FLOAT:
+					self.text_segment += f"    ;; print {val.value}\n"
+					self.text_segment += f"    mov rax, {val.value}\n"
+					self.text_segment += f"    push rax\n"
+					self.text_segment += f"    pop rdi\n"
+					self.text_segment += f"    call print\n\n"
+				elif val.name == STR:
+					self.data_segment += f"    str_{self.str_cnt}: dw {val.value}\n"
+					self.data_segment += f"    str_{self.str_cnt}_len_6969 equ $ - str_{self.str_cnt}\n"
+	
+					self.text_segment += f"    ;; Puts {val.value}\n"
+					self.text_segment += f"    puts str_{self.str_cnt}, str_{self.str_cnt}_len_6969\n\n"
+	
+					self.str_cnt += 1
+				param_idx += 1
+			else:
+				error(val, f"Unknown word \'{val.value}\'");
 
 	def compile(self):
 		self.data_segment  = "section .data\n"
@@ -407,7 +450,6 @@ class Slug:
 
 			while self.token_cnt < len(self.line):
 				token = self.line[self.token_cnt]
-				print(token)
 
 				if token.name == DATA_TYPE:
 					self.token_cnt += 1
@@ -484,12 +526,26 @@ class Slug:
 							self.__mod(tok_a, tok_b)
 
 					elif token.value == EQUAL:
-						self.token_cnt += 2
-						self.__equal()
+						self.token_cnt += 1
 
 				elif token.name == KEYWORD:
-					self.token_cnt += 1
+					print(token)
+					if token.value == PRINT:
+						params = self.line[self.token_cnt + 1:]
+						self.token_cnt = len(self.line)
+						self.__print(params)
 
+					elif token.value == IF:
+						self.token_cnt += 1
+
+					elif token.value == THEN:
+						self.token_cnt += 1
+
+					elif token.value == ELSE:
+						self.token_cnt += 1
+
+					elif token.value == END:
+						self.token_cnt += 1
 		self.__save()
 	
 	def __save(self):
