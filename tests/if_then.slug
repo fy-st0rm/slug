@@ -1,0 +1,46 @@
+int a = 20
+int b = 20
+
+if a == b then
+    print a " == " b ,
+
+    if a * 5 / 10 == b - 10  then
+        print a " == " b ,
+    else
+        print a " != " b ,
+    end
+
+else
+    print a " != " b ,
+end
+
+a = 10
+b = 20
+if a < b then
+    print a " < " b ,
+else
+    print a " > " b ,
+end
+
+a = 20
+b = 10
+if a > b then
+    print a " > " b ,
+else
+    print a " < " b ,
+end
+
+a = 20
+b = 20
+if a >= b then
+    print a " >= " b ,
+else
+    print a " < " b ,
+end
+
+if a <= b then
+    print a " <= " b ,
+else
+    print a " > " b ,
+end
+

@@ -5,6 +5,7 @@ int d = a - b
 int e = a * b
 int f = b / a
 int g = a % b
+int h = a == b
 
 print "A = " a ,
 print "B = " b ,
@@ -13,9 +14,5 @@ print a " - " b " = " d ,
 print a " * " b " = " e ,
 print b " / " a " = " f ,
 print a " % " b " = " g ,
+print a " == " b " = " h ,
 
-if a == 10 then
-    print 69
-else
-    print 420
-end

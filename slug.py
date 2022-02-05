@@ -1,9 +1,11 @@
+#!/bin/python
 import os
 import sys
 
-#TODO: [ ] Properly implement equals operator
-#TODO: [ ] Ability to pop things into the stack
-#TODO: [ ] IF statements
+#TODO: [ ] Add support for if without else
+#TODO: [ ] Add comments
+#TODO: [X] IF statements
+#TODO: [X] Ability to pop things into the stack
 
 WORD = "word"
 
@@ -15,16 +17,26 @@ DATA_TYPE = "data_type"
 data_types = [INT, STR, FLOAT]
 
 # Operators
-PLUS  = "+"
-MINUS = "-"
-MULT  = "*"
-DIV   = "/"
-MOD   = "%"
+PLUS   = "+"
+MINUS  = "-"
+MULT   = "*"
+DIV    = "/"
+MOD    = "%"
 ASSIGN = "="
-EQUAL = "=="
 
 OPERATOR = "operator"
-operators = [ASSIGN, EQUAL, PLUS, MINUS, MULT, DIV, MOD]
+operators = [ASSIGN, PLUS, MINUS, MULT, DIV, MOD]
+
+# Conditions
+LT     = "<"
+GT     = ">"
+EQUAL  = "=="
+LTE    = "<="
+GTE    = ">="
+NT     = "!="
+
+CONDITION = "condition"
+conditions = [LT, GT, EQUAL, LTE, GTE, NT]
 
 # Special keywords 
 PRINT    = "print"
@@ -111,6 +123,8 @@ def create_token(program, words):
 			line.append(Token(DATA_TYPE, word, row, col, file))
 		elif word in operators:
 			line.append(Token(OPERATOR, word, row, col, file))
+		elif word in conditions:
+			line.append(Token(CONDITION, word, row, col, file))
 		elif word.isdigit():
 			line.append(Token(INT, word, row, col, file))
 		elif is_float(word):
@@ -142,12 +156,18 @@ class Slug:
 		# Stacks
 		self.var_stack = {}
 		self.line = []
+		self.addr_stack = []
+
+		# Flags
 		self.assigned_var = None
+		self.con_var    = None
+		self.operation    = None
 
 		# Counters
-		self.prog_cnt = 0
-		self.str_cnt  = 0
+		self.prog_cnt  = 0
+		self.str_cnt   = 0
 		self.token_cnt = 0
+		self.addr_cnt  = -1
 	
 	def simulate(self):
 		token = Token(None, None, 0, 0, self.file)
@@ -156,6 +176,8 @@ class Slug:
 	""" Compilation instructions """
 	def __create_var(self, type):
 		token = self.line[self.token_cnt]
+		self.token_cnt += 1
+
 		variable = Token(type, token.value, token.row, token.col, token.file)
 
 		# Checking if the variable is already declared
@@ -182,7 +204,7 @@ class Slug:
 				self.text_segment += f"    mov dword [{self.assigned_var.value}], {value.value}\n"
 			elif value.name == STR:
 				self.data_segment += f"{value.value}\n"	
-				self.data_segment += f"    {value.value}_len_6969 equ $ - {var.value}\n"
+				self.data_segment += f"    {self.assigned_var.value}_len_6969 equ $ - {self.assigned_var.value}\n"
 				self.str_cnt += 1
 		else:
 			self.text_segment += f"    ;; {self.assigned_var.value} = {value.value}\n"
@@ -196,10 +218,16 @@ class Slug:
 
 		# Copying the first data into register
 		if tok_a.value in self.var_stack:
-			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.value].name
 		elif tok_a.name in data_types:
-			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, {tok_a.value}\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.value}` used for plus operation.")
@@ -233,10 +261,16 @@ class Slug:
 
 		# Copying the first data into register
 		if tok_a.value in self.var_stack:
-			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.value].name
 		elif tok_a.name in data_types:
-			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, {tok_a.value}\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.value}` used for minus operation.")
@@ -270,10 +304,16 @@ class Slug:
 
 		# Copying the first data into register
 		if tok_a.value in self.var_stack:
-			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.value].name
 		elif tok_a.name in data_types:
-			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, {tok_a.value}\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.value}` used for multiply operation.")
@@ -307,10 +347,16 @@ class Slug:
 
 		# Copying the first data into register
 		if tok_a.value in self.var_stack:
-			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.value].name
 		elif tok_a.name in data_types:
-			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, {tok_a.value}\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.value}` used for divide operation.")
@@ -344,10 +390,16 @@ class Slug:
 
 		# Copying the first data into register
 		if tok_a.value in self.var_stack:
-			self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, [{tok_a.value}]\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.value].name
 		elif tok_a.name in data_types:
-			self.text_segment += f"    mov rax, {tok_a.value}\n"
+			if self.assigned_var:
+				self.text_segment += f"    mov rax, {tok_a.value}\n"
+			else:
+				self.text_segment += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.value}` used for modular division operation.")
@@ -375,16 +427,112 @@ class Slug:
 		if type_a != type_b:
 			error(tok_b, f"Cannot use `/` operation between types `{type_a}` and `{type_b}`.")
 
-	def __equal(self, tok_a, tok_b):
-		self.text_segment += f"    {tok_a.value} == {tok_b.value}\n"
+	""" Conditions """
+	def __equal(self):
+		self.text_segment += f"    ;; Equals\n"
 		self.text_segment += f"    mov rcx, 0\n"
 		self.text_segment += f"    mov rdx, 1\n"
-		self.text_segment += f"    pop rax\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+		else:
+			self.text_segment += f"    pop rax\n"
+
 		self.text_segment += f"    pop rbx\n"
-		self.text_semgnet += f"    cmp rax, rbx\n"
+		self.text_segment += f"    cmp rbx, rax\n"
 		self.text_segment += f"    cmove rcx, rdx\n"
-		self.text_segment += f"    push rcx\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov [{self.con_var.value}], rcx\n"
+		else:
+			self.text_segment += f"    push rcx\n"
 	
+		self.operation = None
+
+	def __less_than(self):
+		self.text_segment += f"    ;; Less than\n"
+		self.text_segment += f"    mov rcx, 0\n"
+		self.text_segment += f"    mov rdx, 1\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+		else:
+			self.text_segment += f"    pop rax\n"
+
+		self.text_segment += f"    pop rbx\n"
+		self.text_segment += f"    cmp rbx, rax\n"
+		self.text_segment += f"    cmovl rcx, rdx\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov [{self.con_var.value}], rcx\n"
+		else:
+			self.text_segment += f"    push rcx\n"
+	
+		self.operation = None
+
+	def __greater_than(self):
+		self.text_segment += f"    ;; Greater than\n"
+		self.text_segment += f"    mov rcx, 0\n"
+		self.text_segment += f"    mov rdx, 1\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+		else:
+			self.text_segment += f"    pop rax\n"
+
+		self.text_segment += f"    pop rbx\n"
+		self.text_segment += f"    cmp rbx, rax\n"
+		self.text_segment += f"    cmovg rcx, rdx\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov [{self.con_var.value}], rcx\n"
+		else:
+			self.text_segment += f"    push rcx\n"
+	
+		self.operation = None
+
+	def __less_than_equal(self):
+		self.text_segment += f"    ;; Less than equal\n"
+		self.text_segment += f"    mov rcx, 0\n"
+		self.text_segment += f"    mov rdx, 1\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+		else:
+			self.text_segment += f"    pop rax\n"
+
+		self.text_segment += f"    pop rbx\n"
+		self.text_segment += f"    cmp rbx, rax\n"
+		self.text_segment += f"    cmovle rcx, rdx\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov [{self.con_var.value}], rcx\n"
+		else:
+			self.text_segment += f"    push rcx\n"
+	
+		self.operation = None
+
+	def __greater_than_equal(self):
+		self.text_segment += f"    ;; Greater than equal\n"
+		self.text_segment += f"    mov rcx, 0\n"
+		self.text_segment += f"    mov rdx, 1\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+		else:
+			self.text_segment += f"    pop rax\n"
+
+		self.text_segment += f"    pop rbx\n"
+		self.text_segment += f"    cmp rbx, rax\n"
+		self.text_segment += f"    cmovge rcx, rdx\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov [{self.con_var.value}], rcx\n"
+		else:
+			self.text_segment += f"    push rcx\n"
+	
+		self.operation = None
+
 	""" Special keywords """
 	def __print(self, params):
 		param_idx = 0
@@ -447,6 +595,7 @@ class Slug:
 			self.prog_cnt += 1
 			self.token_cnt = 0
 			self.assigned_var = None
+			self.con_var = None
 
 			while self.token_cnt < len(self.line):
 				token = self.line[self.token_cnt]
@@ -457,16 +606,26 @@ class Slug:
 
 				elif token.name == WORD:
 					self.token_cnt += 1
-					if self.assigned_var:
-						if token.value in self.var_stack:
+					if token.value in self.var_stack:
+						if self.assigned_var:
 							self.__assign_var(self.var_stack[token.value])
 						else:
-							error(token, f"Invalid syntax.")
+							if self.line[self.token_cnt].value != ASSIGN:
+								# Pushing onto the stack
+								self.text_segment += f"    ;; Pushing {token.value}\n"
+								self.text_segment += f"    mov rax, [{token.value}]\n"
+								self.text_segment += f"    push rax\n"
+					else:
+						error(token, f"Undefined reference to `{token.value}`.")
 
 				elif token.name in data_types:
 					self.token_cnt += 1
 					if self.assigned_var:
 						self.__assign_var(token)	
+					else:
+						# Pusing into the stack
+						self.text_segment += f"    ;; Pushing {token.value}\n"
+						self.text_segment += f"    push {token.value}\n"
 
 				elif token.name == OPERATOR:
 					if self.token_cnt + 1 == len(self.line):
@@ -525,11 +684,82 @@ class Slug:
 						else:
 							self.__mod(tok_a, tok_b)
 
-					elif token.value == EQUAL:
+				elif token.name == CONDITION:
+
+					if token.value == EQUAL:
+						self.token_cnt += 1
+
+						if self.operation:
+							self.operation()
+
+						# Copying the assigned variable to the equal variable for comparision and resetting it to make other value push in the stack
+						if self.assigned_var:
+							 self.con_var = self.assigned_var
+						self.assigned_var = None
+
+						# Putting the function pointer
+						self.operation = self.__equal
+					
+					elif token.value == LT:
+						self.token_cnt += 1
+						
+						if self.operation:
+							self.operation()
+
+						# Copying the assigned variable to the equal variable for comparision and resetting it to make other value push in the stack
+						if self.assigned_var:
+							 self.con_var = self.assigned_var
+						self.assigned_var = None
+
+						# Putting the function pointer
+						self.operation = self.__less_than
+
+					elif token.value == GT:
+						self.token_cnt += 1
+
+						if self.operation:
+							self.operation()
+
+						# Copying the assigned variable to the equal variable for comparision and resetting it to make other value push in the stack
+						if self.assigned_var:
+							 self.con_var = self.assigned_var
+						self.assigned_var = None
+
+						# Putting the function pointer
+						self.operation = self.__greater_than
+					
+					elif token.value == LTE:
+						self.token_cnt += 1
+
+						if self.operation:
+							self.operation()
+
+						# Copying the assigned variable to the equal variable for comparision and resetting it to make other value push in the stack
+						if self.assigned_var:
+							 self.con_var = self.assigned_var
+						self.assigned_var = None
+
+						# Putting the function pointer
+						self.operation = self.__less_than_equal
+					
+					elif token.value == GTE:
+						self.token_cnt += 1
+
+						if self.operation:
+							self.operation()
+
+						# Copying the assigned variable to the equal variable for comparision and resetting it to make other value push in the stack
+						if self.assigned_var:
+							 self.con_var = self.assigned_var
+						self.assigned_var = None
+
+						# Putting the function pointer
+						self.operation = self.__greater_than_equal
+					
+					elif token.value == NT:
 						self.token_cnt += 1
 
 				elif token.name == KEYWORD:
-					print(token)
 					if token.value == PRINT:
 						params = self.line[self.token_cnt + 1:]
 						self.token_cnt = len(self.line)
@@ -537,15 +767,47 @@ class Slug:
 
 					elif token.value == IF:
 						self.token_cnt += 1
+						self.addr_cnt = len(self.addr_stack)
+						self.addr_stack.append([self.addr_cnt, 0])
 
 					elif token.value == THEN:
 						self.token_cnt += 1
 
+						if self.addr_cnt < 0:
+							error(token, "then without if.")
+						if self.addr_stack[self.addr_cnt][1]:
+							error(token, "then without if.")
+
+						self.addr_stack[self.addr_cnt][1] = 1
+
+						if self.operation:
+							self.operation()
+
+						self.text_segment += f"    ;; If..then\n"
+						self.text_segment += f"    pop rax\n"
+						self.text_segment += f"    cmp rax, 1\n"
+						self.text_segment += f"    je  addr_{self.addr_stack[self.addr_cnt][0]}_then\n"
+						self.text_segment += f"    jne addr_{self.addr_stack[self.addr_cnt][0]}_else\n"
+
+						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][0]}_then:\n"
+
 					elif token.value == ELSE:
 						self.token_cnt += 1
+						self.text_segment += f"    jmp addr_{self.addr_stack[self.addr_cnt][0]}_end\n"
+						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][0]}_else:\n"
 
 					elif token.value == END:
 						self.token_cnt += 1
+						self.text_segment += f"    jmp addr_{self.addr_stack[self.addr_cnt][0]}_end\n"
+						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][0]}_end:\n"
+						self.addr_cnt -= 1
+
+					else:
+						error(token, "Invalid syntax.")
+
+			if self.operation:
+				self.operation()
+
 		self.__save()
 	
 	def __save(self):
@@ -650,7 +912,7 @@ class Slug:
 
 def usage():
 	print("Usage: slug [mode] [file_name]")
-	print("mode:  sim   --- simulates program")
+	print("mode:  sim   --- simulates program (Not implemented)")
 	print("       com   --- compiles  program")
 
 if __name__ == "__main__":
