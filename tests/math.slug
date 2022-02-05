@@ -1,4 +1,4 @@
-int a = 10
+int a = 10 * 2
 int b = 20
 int c = a + b
 int d = a - b 
@@ -6,6 +6,10 @@ int e = a * b
 int f = b / a
 int g = a % b
 int h = a == b
+int j = a < b
+int k = a > b
+int l = a <= b
+int m = a >= b
 
 print "A = " a ,
 print "B = " b ,
@@ -15,4 +19,8 @@ print a " * " b " = " e ,
 print b " / " a " = " f ,
 print a " % " b " = " g ,
 print a " == " b " = " h ,
+print a " < " b " = " j ,
+print a " > " b " = " k ,
+print a " <= " b " = " l ,
+print a " >= " b " = " m ,
 

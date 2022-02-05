@@ -1,5 +1,9 @@
+// Tests for if statements
 int a = 20
 int b = 20
+
+int c = a * 5 / 10
+print c ,
 
 if a == b then
     print a " == " b ,
@@ -30,7 +34,7 @@ else
     print a " < " b ,
 end
 
-a = 20
+a = 10
 b = 20
 if a >= b then
     print a " >= " b ,
@@ -42,5 +46,11 @@ if a <= b then
     print a " <= " b ,
 else
     print a " > " b ,
+end
+
+if a != b then
+    print a " != " b ,
+else
+    print a " == " b ,
 end
 

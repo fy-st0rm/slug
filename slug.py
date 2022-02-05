@@ -2,12 +2,11 @@
 import os
 import sys
 
+#TODO: [ ] While loop
 #TODO: [ ] Add support for if without else
-#TODO: [ ] Add comments
-#TODO: [X] IF statements
-#TODO: [X] Ability to pop things into the stack
 
 WORD = "word"
+COMMENT = "//"
 
 # Data types
 INT = "int"
@@ -73,12 +72,14 @@ class Token:
 def chop_word(line, file):
 	word = ""
 	words = []
-	i = 0
-	col = 0
+
 	str_start = False
 
 	row = line[0] + 1
+	col = 1
 	line = line[1] 
+
+	i = 0
 	while i < len(line):
 		ch = line[i]
 
@@ -110,6 +111,7 @@ def chop_word(line, file):
 def create_token(program, words):
 	i = 0
 	line = []
+	cmt_start = False
 
 	# Removing the free spaces
 	words = list(filter(bool, words))
@@ -119,7 +121,9 @@ def create_token(program, words):
 		word = words[i][2]
 		file = words[i][3]
 
-		if word in data_types:
+		if cmt_start:
+			line.append(Token(COMMENT, word, row, col, file))
+		elif word in data_types:
 			line.append(Token(DATA_TYPE, word, row, col, file))
 		elif word in operators:
 			line.append(Token(OPERATOR, word, row, col, file))
@@ -133,6 +137,9 @@ def create_token(program, words):
 			line.append(Token(STR, word, row, col, file))
 		elif word in keywords:
 			line.append(Token(KEYWORD, word, row, col, file))
+		elif word == COMMENT:
+			line.append(Token(COMMENT, word, row, col, file))
+			cmt_start = True
 		else:
 			line.append(Token(WORD, word, row, col, file))
 		i += 1
@@ -537,6 +544,28 @@ class Slug:
 			self.text_segment += f"    push rcx\n"
 	
 		self.operation = None
+	
+	def __not_equal(self):
+		self.text_segment += f"    ;; Not equal\n"
+		self.text_segment += f"    mov rcx, 0\n"
+		self.text_segment += f"    mov rdx, 1\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov rbx, [{self.con_var.value}]\n"
+			self.text_segment += f"    pop rax\n"
+		else:
+			self.text_segment += f"    pop rax\n"
+			self.text_segment += f"    pop rbx\n"
+
+		self.text_segment += f"    cmp rbx, rax\n"
+		self.text_segment += f"    cmovne rcx, rdx\n"
+
+		if self.con_var:
+			self.text_segment += f"    mov [{self.con_var.value}], rcx\n"
+		else:
+			self.text_segment += f"    push rcx\n"
+	
+		self.operation = None
 
 	""" Special keywords """
 	def __print(self, params):
@@ -611,13 +640,18 @@ class Slug:
 
 				elif token.name == WORD:
 					self.token_cnt += 1
-					if self.token_cnt >= len(self.line): self.token_cnt = len(self.line) - 1
 
 					if token.value in self.var_stack:
 						if self.assigned_var:
 							self.__assign_var(self.var_stack[token.value])
 						else:
-							if self.line[self.token_cnt].value != ASSIGN:
+							if self.token_cnt < len(self.line):
+								if self.line[self.token_cnt].value != ASSIGN:
+									# Pushing onto the stack
+									self.text_segment += f"    ;; Pushing {token.value}\n"
+									self.text_segment += f"    mov rax, [{token.value}]\n"
+									self.text_segment += f"    push rax\n"
+							else:
 								# Pushing onto the stack
 								self.text_segment += f"    ;; Pushing {token.value}\n"
 								self.text_segment += f"    mov rax, [{token.value}]\n"
@@ -767,6 +801,17 @@ class Slug:
 					elif token.value == NT:
 						self.token_cnt += 1
 
+						if self.operation:
+							self.operation()
+
+						# Copying the assigned variable to the equal variable for comparision and resetting it to make other value push in the stack
+						if self.assigned_var:
+							 self.con_var = self.assigned_var
+						self.assigned_var = None
+
+						# Putting the function pointer
+						self.operation = self.__not_equal
+
 				elif token.name == KEYWORD:
 					if token.value == PRINT:
 						params = self.line[self.token_cnt + 1:]
@@ -813,8 +858,12 @@ class Slug:
 					else:
 						error(token, "Invalid syntax.")
 
+				elif token.name == COMMENT:
+					self.token_cnt += 1
+
 			if self.operation:
 				self.operation()
+
 
 		self.__save()
 	
