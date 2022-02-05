@@ -434,11 +434,12 @@ class Slug:
 		self.text_segment += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+			self.text_segment += f"    mov rbx, [{self.con_var.value}]\n"
+			self.text_segment += f"    pop rax\n"
 		else:
 			self.text_segment += f"    pop rax\n"
+			self.text_segment += f"    pop rbx\n"
 
-		self.text_segment += f"    pop rbx\n"
 		self.text_segment += f"    cmp rbx, rax\n"
 		self.text_segment += f"    cmove rcx, rdx\n"
 
@@ -455,11 +456,12 @@ class Slug:
 		self.text_segment += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+			self.text_segment += f"    mov rbx, [{self.con_var.value}]\n"
+			self.text_segment += f"    pop rax\n"
 		else:
 			self.text_segment += f"    pop rax\n"
+			self.text_segment += f"    pop rbx\n"
 
-		self.text_segment += f"    pop rbx\n"
 		self.text_segment += f"    cmp rbx, rax\n"
 		self.text_segment += f"    cmovl rcx, rdx\n"
 
@@ -476,11 +478,12 @@ class Slug:
 		self.text_segment += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+			self.text_segment += f"    mov rbx, [{self.con_var.value}]\n"
+			self.text_segment += f"    pop rax\n"
 		else:
 			self.text_segment += f"    pop rax\n"
+			self.text_segment += f"    pop rbx\n"
 
-		self.text_segment += f"    pop rbx\n"
 		self.text_segment += f"    cmp rbx, rax\n"
 		self.text_segment += f"    cmovg rcx, rdx\n"
 
@@ -497,11 +500,12 @@ class Slug:
 		self.text_segment += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+			self.text_segment += f"    mov rbx, [{self.con_var.value}]\n"
+			self.text_segment += f"    pop rax\n"
 		else:
 			self.text_segment += f"    pop rax\n"
+			self.text_segment += f"    pop rbx\n"
 
-		self.text_segment += f"    pop rbx\n"
 		self.text_segment += f"    cmp rbx, rax\n"
 		self.text_segment += f"    cmovle rcx, rdx\n"
 
@@ -518,11 +522,12 @@ class Slug:
 		self.text_segment += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.text_segment += f"    mov rax, [{self.con_var.value}]\n"
+			self.text_segment += f"    mov rbx, [{self.con_var.value}]\n"
+			self.text_segment += f"    pop rax\n"
 		else:
 			self.text_segment += f"    pop rax\n"
+			self.text_segment += f"    pop rbx\n"
 
-		self.text_segment += f"    pop rbx\n"
 		self.text_segment += f"    cmp rbx, rax\n"
 		self.text_segment += f"    cmovge rcx, rdx\n"
 
@@ -606,6 +611,8 @@ class Slug:
 
 				elif token.name == WORD:
 					self.token_cnt += 1
+					if self.token_cnt >= len(self.line): self.token_cnt = len(self.line) - 1
+
 					if token.value in self.var_stack:
 						if self.assigned_var:
 							self.__assign_var(self.var_stack[token.value])
@@ -615,6 +622,7 @@ class Slug:
 								self.text_segment += f"    ;; Pushing {token.value}\n"
 								self.text_segment += f"    mov rax, [{token.value}]\n"
 								self.text_segment += f"    push rax\n"
+								self.token_cnt += 1
 					else:
 						error(token, f"Undefined reference to `{token.value}`.")
 
