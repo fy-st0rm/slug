@@ -1,0 +1,49 @@
+print "Begining of the loop" ,
+
+int i = 0
+while i < 10 do
+    print i ,
+    i = i + 1
+end 
+
+print "End of the loop" ,
+
+print "Even numbers: "
+
+int a = 1
+while a < 100 do
+    if a % 2 == 0 then
+        print a ", "
+    else
+    end
+    a = a + 1
+end
+
+print , "Prime numbers: "
+
+int b = 1 
+int n = 0
+int c = 1
+int cnt = 0
+int term = 10
+
+while n < term do
+    cnt = 0
+    c = 1
+    while c <= b do
+        if b % c == 0 then
+            cnt = cnt + 1
+        else
+        end
+        c = c + 1
+    end
+
+    if cnt == 2 then
+        print b ", "
+        n = n + 1
+    else
+    end 
+    b = b + 1
+end
+print ,
+

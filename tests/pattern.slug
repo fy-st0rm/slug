@@ -1,0 +1,12 @@
+str text = "*"
+int i = 0
+int j = 0
+while i < 10 do
+    j = 0
+    while j < i do
+        print text 
+        j = j + 1
+    end
+    print ,
+    i = i + 1
+end

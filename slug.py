@@ -2,8 +2,9 @@
 import os
 import sys
 
-#TODO: [ ] While loop
+#TODO: [ ] Some variable names are not allowed to create due to registers name conflict (FIX THAT)
 #TODO: [ ] Add support for if without else
+#TODO: [X] While loop
 
 WORD = "word"
 COMMENT = "//"
@@ -44,8 +45,10 @@ IF       = "if"
 THEN     = "then"
 ELSE     = "else"
 END      = "end"
+WHILE	 = "while"
+DO		 = "do"
 KEYWORD  = "keyword"
-keywords = [PRINT, NEW_LINE, IF, THEN, ELSE, END]
+keywords = [PRINT, NEW_LINE, IF, THEN, ELSE, END, WHILE, DO]
 
 def error(token, msg):
 	print(f"\033[91mError: {token.file}\033[0m:{str(token.row)}:{str(token.col)}: {msg}", file=sys.stderr)
@@ -379,6 +382,7 @@ class Slug:
 			error(tok_b, f"Unknown word `{tok_b.value}` used for divide operation.")
 
 		# Adding them both
+		self.text_segment += f"    xor rdx, rdx\n"
 		self.text_segment += f"    div rbx\n"
 		
 		# If there is a assigned variable then storing in that else pushing it into stack
@@ -422,6 +426,7 @@ class Slug:
 			error(tok_b, f"Unknown word `{tok_b.value}` used for modular division operation.")
 
 		# Adding them both
+		self.text_segment += f"    xor rdx, rdx\n"
 		self.text_segment += f"    div rbx\n"
 		
 		# If there is a assigned variable then storing in that else pushing it into stack
@@ -583,9 +588,7 @@ class Slug:
 				var = self.var_stack[val.value]
 				if var.name == INT or var.name == FLOAT:
 					self.text_segment += f"    ;; print {var.value}\n"
-					self.text_segment += f"    mov rax, [{var.value}]\n"
-					self.text_segment += f"    push rax\n"
-					self.text_segment += f"    pop rdi\n"
+					self.text_segment += f"    mov rdi, [{var.value}]\n"
 					self.text_segment += f"    call print\n\n"
 				elif var.name == STR:
 					self.text_segment += f"    ;; Puts {val.value}\n"
@@ -594,9 +597,7 @@ class Slug:
 			elif val.name in data_types:
 				if val.name == INT or val.name == FLOAT:
 					self.text_segment += f"    ;; print {val.value}\n"
-					self.text_segment += f"    mov rax, {val.value}\n"
-					self.text_segment += f"    push rax\n"
-					self.text_segment += f"    pop rdi\n"
+					self.text_segment += f"    mov rdi, {val.value}\n"
 					self.text_segment += f"    call print\n\n"
 				elif val.name == STR:
 					self.data_segment += f"    str_{self.str_cnt}: dw {val.value}\n"
@@ -612,7 +613,7 @@ class Slug:
 
 	def compile(self):
 		self.data_segment  = "section .data\n"
-		self.data_segment += "    nl dw 10\n"
+		self.data_segment += "    nl: dw 10\n"
 		self.bss_segment   = "section .bss\n"
 
 		self.text_segment  = "section .text\n"
@@ -813,6 +814,7 @@ class Slug:
 						self.operation = self.__not_equal
 
 				elif token.name == KEYWORD:
+
 					if token.value == PRINT:
 						params = self.line[self.token_cnt + 1:]
 						self.token_cnt = len(self.line)
@@ -821,39 +823,80 @@ class Slug:
 					elif token.value == IF:
 						self.token_cnt += 1
 						self.addr_cnt = len(self.addr_stack)
-						self.addr_stack.append([self.addr_cnt, 0])
+						self.addr_stack.append([IF, self.addr_cnt, 0, 0])
+						self.text_segment += f"    ;; If\n"
 
 					elif token.value == THEN:
 						self.token_cnt += 1
 
 						if self.addr_cnt < 0:
 							error(token, "then without if.")
-						if self.addr_stack[self.addr_cnt][1]:
+						if self.addr_stack[self.addr_cnt][2]:
 							error(token, "then without if.")
 
-						self.addr_stack[self.addr_cnt][1] = 1
+						self.addr_stack[self.addr_cnt][2] = 1
 
 						if self.operation:
 							self.operation()
 
-						self.text_segment += f"    ;; If..then\n"
+						self.text_segment += f"    ;; Then\n"
 						self.text_segment += f"    pop rax\n"
 						self.text_segment += f"    cmp rax, 1\n"
-						self.text_segment += f"    je  addr_{self.addr_stack[self.addr_cnt][0]}_then\n"
-						self.text_segment += f"    jne addr_{self.addr_stack[self.addr_cnt][0]}_else\n"
+						self.text_segment += f"    je  addr_{self.addr_stack[self.addr_cnt][1]}_then\n"
+						self.text_segment += f"    jne addr_{self.addr_stack[self.addr_cnt][1]}_else\n"
 
-						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][0]}_then:\n"
+						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][1]}_then:\n"
 
 					elif token.value == ELSE:
 						self.token_cnt += 1
-						self.text_segment += f"    jmp addr_{self.addr_stack[self.addr_cnt][0]}_end\n"
-						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][0]}_else:\n"
+						self.text_segment += f"    jmp addr_{self.addr_stack[self.addr_cnt][1]}_end\n"
+						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][1]}_else:\n"
 
 					elif token.value == END:
 						self.token_cnt += 1
-						self.text_segment += f"    jmp addr_{self.addr_stack[self.addr_cnt][0]}_end\n"
-						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][0]}_end:\n"
-						self.addr_cnt -= 1
+						if self.addr_stack[self.addr_cnt][0] == IF:
+							self.text_segment += f"    jmp addr_{self.addr_stack[self.addr_cnt][1]}_end\n"
+						elif self.addr_stack[self.addr_cnt][0] == WHILE:
+							self.text_segment += f"    jmp addr_{self.addr_stack[self.addr_cnt][1]}_while\n"
+						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][1]}_end:\n"
+
+						# Telling that this address has ended
+						self.addr_stack[self.addr_cnt][3] = 1
+
+						# Finding the previous address that hasnt been ended
+						while self.addr_stack[self.addr_cnt][3]:
+							self.addr_cnt -= 1
+							if self.addr_cnt < 0:
+								self.addr_cnt = 0
+								break
+
+					elif token.value == WHILE:
+						self.token_cnt += 1
+						self.addr_cnt = len(self.addr_stack)
+						self.addr_stack.append([WHILE, self.addr_cnt, 0, 0])
+						self.text_segment += f"    ;; While\n"
+						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][1]}_while:\n"
+
+					elif token.value == DO:
+						self.token_cnt += 1
+
+						if self.addr_cnt < 0:
+							error(token, "do without while.")
+						if self.addr_stack[self.addr_cnt][2]:
+							error(token, "do without while.")
+
+						self.addr_stack[self.addr_cnt][2] = 1
+
+						if self.operation:
+							self.operation()
+
+						self.text_segment += f"    ;; Do\n"
+						self.text_segment += f"    pop rax\n"
+						self.text_segment += f"    cmp rax, 1\n"
+						self.text_segment += f"    je  addr_{self.addr_stack[self.addr_cnt][1]}_do\n"
+						self.text_segment += f"    jne addr_{self.addr_stack[self.addr_cnt][1]}_end\n"
+
+						self.text_segment += f"addr_{self.addr_stack[self.addr_cnt][1]}_do:\n"
 
 					else:
 						error(token, "Invalid syntax.")
@@ -863,7 +906,6 @@ class Slug:
 
 			if self.operation:
 				self.operation()
-
 
 		self.__save()
 	
@@ -938,8 +980,8 @@ class Slug:
 		print_func += "    mov     rax, QWORD   [rbp-8]\n"
 		print_func += "    mov     rdx, rax\n"
 		print_func += "    mov     rsi, rcx\n"
-		print_func += "	   mov     rax, 1\n"
-		print_func += "	   mov	   rdi, 1\n"
+		print_func += "    mov     rax, 1\n"
+		print_func += "    mov     rdi, 1\n"
 		print_func += "    syscall\n"
 		print_func += "    nop\n"
 		print_func += "    leave\n"
@@ -994,4 +1036,3 @@ if __name__ == "__main__":
 		slug.simulate()
 	elif mode == "com":
 		slug.compile()
-
