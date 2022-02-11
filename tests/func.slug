@@ -1,0 +1,20 @@
+
+func sum : int a int b -> int in
+    return a + b
+end
+
+func sub : int a int b -> int in
+    int c = a - b
+    return c
+end
+
+int x = 34
+int y = 35
+
+int a = sum(x y)
+int b = sub(x y)
+int c = sum(sub(x y) sub(x y))
+
+print "Sum: " a ,
+print "Sub: " b ,
+print "IDK: " c ,
