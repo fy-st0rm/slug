@@ -2,10 +2,10 @@
 import os
 import sys
 
-#TODO: [ ] Some variable names are not allowed to create due to registers name conflict (FIX THAT)
 #TODO: [ ] Add support for if without else
 #TODO: [X] Introduce scopes
 #TODO: [X] Implement functions
+#TODO: [X] Some variable names are not allowed to create due to registers name conflict (FIX THAT)
 
 WORD = "word"
 COMMENT = "#"
@@ -318,10 +318,10 @@ class Slug:
 		# Generating assembly
 		if self.curr_scope.id == 0:
 			if type == INT or type == FLOAT:
-				self.segments["bss"]  += f"    {variable.value}: resd 32\n"
+				self.segments["bss"]  += f"    __{variable.value}__: resd 32\n"
 			elif type == STR:
-				self.segments["data"] += f"    {variable.value}: dw "
-			variable.value = f"[{variable.value}]"
+				self.segments["data"] += f"    __{variable.value}__: dw "
+			variable.value = f"[__{variable.value}__]"
 		else:
 			variable.value = f"[rbp - {self.local_var_cnt + 8}]"
 			self.local_var_cnt += 8
@@ -343,7 +343,7 @@ class Slug:
 				self.segments[self.curr_segment] += f"    mov dword {self.assigned_var.value}, {value.value}\n"
 			elif value.name == STR:
 				self.segments["data"] += f"{value.value}\n"	
-				self.segments["data"] += f"    {self.assigned_var.id}_len_6969 equ $ - {self.assigned_var.id}\n"
+				self.segments["data"] += f"    {self.assigned_var.id}_len  equ $ - __{self.assigned_var.id}__\n"
 				self.str_cnt += 1
 		else:
 			self.segments[self.curr_segment] += f"    ;; {self.assigned_var.id} = {value.id}\n"
@@ -729,7 +729,7 @@ class Slug:
 					self.segments[self.curr_segment] += f"    call print\n\n"
 				elif var.name == STR:
 					self.segments[self.curr_segment] += f"    ;; Puts {val.id}\n"
-					self.segments[self.curr_segment] += f"    puts {val.id}, {val.id}_len_6969\n\n"
+					self.segments[self.curr_segment] += f"    puts __{val.id}__, {val.id}_len \n\n"
 				param_idx += 1
 			elif val.name in data_types:
 				if val.name == INT or val.name == FLOAT:
@@ -738,10 +738,10 @@ class Slug:
 					self.segments[self.curr_segment] += f"    call print\n\n"
 				elif val.name == STR:
 					self.segments["data"] += f"    str_{self.str_cnt}: dw {val.value}\n"
-					self.segments["data"] += f"    str_{self.str_cnt}_len_6969 equ $ - str_{self.str_cnt}\n"
+					self.segments["data"] += f"    str_{self.str_cnt}_len  equ $ - str_{self.str_cnt}\n"
 	
 					self.segments[self.curr_segment] += f"    ;; Puts {val.value}\n"
-					self.segments[self.curr_segment] += f"    puts str_{self.str_cnt}, str_{self.str_cnt}_len_6969\n\n"
+					self.segments[self.curr_segment] += f"    puts str_{self.str_cnt}, str_{self.str_cnt}_len \n\n"
 	
 					self.str_cnt += 1
 				param_idx += 1
@@ -750,7 +750,6 @@ class Slug:
 	
 	def __return(self):
 		self.segments[self.curr_segment] += f"    pop rax\n"
-		#TODO: Add a proper return system
 		self.segments[self.curr_segment] += f"    mov rbp, rsp\n"
 		self.segments[self.curr_segment] += f"    pop rbp\n"
 		self.segments[self.curr_segment] += f"    ret\n"
