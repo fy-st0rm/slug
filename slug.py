@@ -2,10 +2,8 @@
 import os
 import sys
 
-#TODO: [ ] Add support for if without else
-#TODO: [X] Introduce scopes
-#TODO: [X] Implement functions
-#TODO: [X] Some variable names are not allowed to create due to registers name conflict (FIX THAT)
+#TODO: [ ] Include files
+#TODO: [ ] Add syscalls
 
 WORD = "word"
 COMMENT = "#"
@@ -247,9 +245,12 @@ class Slug:
 				"bss" : self.bss_segment,
 				"data": self.data_segment,
 				"exit": self.exit_segment,
-				"func": self.func_segment
+				"func": self.func_segment,
+				"if"  : "",
+				"then": "",
+				"else": ""
 		}
-		self.curr_segment = "text"
+		self.curr_segment = ["text"]
 
 		# Stacks
 		self.scopes = []
@@ -293,7 +294,7 @@ class Slug:
 			self.var_stack.pop(i)
 
 		for i in range(self.ret_stack):
-			self.segments[self.curr_segment] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 		self.ret_stack = 0
 
 		# Gives the previous scope
@@ -339,35 +340,35 @@ class Slug:
 
 		if value.id not in self.var_stack:
 			if value.name == INT or value.name == FLOAT:
-				self.segments[self.curr_segment] += f"    ;; {self.assigned_var.id} = {value.id}\n"
-				self.segments[self.curr_segment] += f"    mov dword {self.assigned_var.value}, {value.value}\n"
+				self.segments[self.curr_segment[-1]] += f"    ;; {self.assigned_var.id} = {value.id}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov dword {self.assigned_var.value}, {value.value}\n"
 			elif value.name == STR:
 				self.segments["data"] += f"{value.value}\n"	
 				self.segments["data"] += f"    {self.assigned_var.id}_len  equ $ - __{self.assigned_var.id}__\n"
 				self.str_cnt += 1
 		else:
-			self.segments[self.curr_segment] += f"    ;; {self.assigned_var.id} = {value.id}\n"
-			self.segments[self.curr_segment] += f"    mov rax, {value.value}\n"
-			self.segments[self.curr_segment] += f"    mov {self.assigned_var.value}, rax\n"
+			self.segments[self.curr_segment[-1]] += f"    ;; {self.assigned_var.id} = {value.id}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rax, {value.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.assigned_var.value}, rax\n"
 	
 	""" Arthimetic operation """
 	def __plus(self, tok_a, tok_b):
 		type_a = type_b = None
-		self.segments[self.curr_segment] += f"    ;; {tok_a.id} + {tok_b.id}\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} + {tok_b.id}\n"
 
 		# Copying the first data into register
 		# Getting the type of first token
 		if tok_a.value in self.var_stack:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.id].name
 		elif tok_a.name in data_types:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.id}` used for plus operation.")
@@ -375,22 +376,22 @@ class Slug:
 		# Copying the second data into register
 		# Getting the type of second token
 		if tok_b.value in self.var_stack:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
 			type_b = self.var_stack[tok_b.id].name
 		elif tok_b.name in data_types:
-			self.segments[self.curr_segment] += f"    mov rbx, {tok_b.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {tok_b.value}\n"
 			type_b = tok_b.name
 		else:
 			error(tok_b, f"Unknown word `{tok_b.id}` used for plus operation.")
 
 		# Adding them both
-		self.segments[self.curr_segment] += f"    add rax, rbx\n"
+		self.segments[self.curr_segment[-1]] += f"    add rax, rbx\n"
 		
 		# If there is a assigned variable then storing in that else pushing it into stack
 		if self.assigned_var:
-			self.segments[self.curr_segment] += f"    mov {self.var_stack[self.assigned_var.id].value}, rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.var_stack[self.assigned_var.id].value}, rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rax\n"
+			self.segments[self.curr_segment[-1]] += f"    push rax\n"
 
 		# Type checking
 		if type_a != type_b:
@@ -398,21 +399,21 @@ class Slug:
 
 	def __minus(self, tok_a, tok_b):
 		type_a = type_b = None
-		self.segments[self.curr_segment] += f"    ;; {tok_a.id} - {tok_b.id}\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} - {tok_b.id}\n"
 
 		# Copying the first data into register
 		# Getting the type of the first token
 		if tok_a.value in self.var_stack:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.id].name
 		elif tok_a.name in data_types:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.id}` used for minus operation.")
@@ -420,21 +421,21 @@ class Slug:
 		# Copying the second data into register
 		# Getting the type of sencond token
 		if tok_b.value in self.var_stack:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
 			type_b = self.var_stack[tok_b.id].name
 		elif tok_b.name in data_types:
-			self.segments[self.curr_segment] += f"    mov rbx, {tok_b.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {tok_b.value}\n"
 			type_b = tok_b.name
 		else:
 			error(tok_b, f"Unknown word `{tok_b.id}` used for minus operation.")
 
-		self.segments[self.curr_segment] += f"    sub rax, rbx\n"
+		self.segments[self.curr_segment[-1]] += f"    sub rax, rbx\n"
 		
 		# If there is a assigned variable then storing in that else pushing it into stack
 		if self.assigned_var:
-			self.segments[self.curr_segment] += f"    mov {self.var_stack[self.assigned_var.id].value}, rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.var_stack[self.assigned_var.id].value}, rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rax\n"
+			self.segments[self.curr_segment[-1]] += f"    push rax\n"
 
 		# Type checking
 		if type_a != type_b:
@@ -442,21 +443,21 @@ class Slug:
 
 	def __mult(self, tok_a, tok_b):
 		type_a = type_b = None
-		self.segments[self.curr_segment] += f"    ;; {tok_a.id} * {tok_b.id}\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} * {tok_b.id}\n"
 
 		# Copying the first data into register
 		# Getting the type of first token
 		if tok_a.value in self.var_stack:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.id].name
 		elif tok_a.name in data_types:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.id}` used for multiply operation.")
@@ -464,21 +465,21 @@ class Slug:
 		# Copying the second data into register
 		# Getting the type of second token
 		if tok_b.value in self.var_stack:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
 			type_b = self.var_stack[tok_b.id].name
 		elif tok_b.name in data_types:
-			self.segments[self.curr_segment] += f"    mov rbx, {tok_b.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {tok_b.value}\n"
 			type_b = tok_b.name
 		else:
 			error(tok_b, f"Unknown word `{tok_b.id}` used for multiply operation.")
 
-		self.segments[self.curr_segment] += f"    mul rbx\n"
+		self.segments[self.curr_segment[-1]] += f"    mul rbx\n"
 		
 		# If there is a assigned variable then storing in that else pushing it into stack
 		if self.assigned_var:
-			self.segments[self.curr_segment] += f"    mov {self.var_stack[self.assigned_var.id].value}, rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.var_stack[self.assigned_var.id].value}, rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rax\n"
+			self.segments[self.curr_segment[-1]] += f"    push rax\n"
 
 		# Type checking
 		if type_a != type_b:
@@ -486,21 +487,21 @@ class Slug:
 
 	def __div(self, tok_a, tok_b):
 		type_a = type_b = None
-		self.segments[self.curr_segment] += f"    ;; {tok_a.id} / {tok_b.id}\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} / {tok_b.id}\n"
 
 		# Copying the first data into register
 		# Getting the type of the first token
 		if tok_a.value in self.var_stack:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.id].name
 		elif tok_a.name in data_types:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.id}` used for divide operation.")
@@ -508,23 +509,23 @@ class Slug:
 		# Copying the second data into register
 		# Getting the type of the second token
 		if tok_b.value in self.var_stack:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
 			type_b = self.var_stack[tok_b.id].name
 		elif tok_b.name in data_types:
-			self.segments[self.curr_segment] += f"    mov rbx, {tok_b.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {tok_b.value}\n"
 			type_b = tok_b.name
 		else:
 			error(tok_b, f"Unknown word `{tok_b.id}` used for divide operation.")
 
 		# Adding them both
-		self.segments[self.curr_segment] += f"    xor rdx, rdx\n"
-		self.segments[self.curr_segment] += f"    div rbx\n"
+		self.segments[self.curr_segment[-1]] += f"    xor rdx, rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    div rbx\n"
 		
 		# If there is a assigned variable then storing in that else pushing it into stack
 		if self.assigned_var:
-			self.segments[self.curr_segment] += f"    mov {self.var_stack[self.assigned_var.id].value}, rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.var_stack[self.assigned_var.id].value}, rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rax\n"
+			self.segments[self.curr_segment[-1]] += f"    push rax\n"
 
 		# Type checking
 		if type_a != type_b:
@@ -532,21 +533,21 @@ class Slug:
 
 	def __mod(self, tok_a, tok_b):
 		type_a = type_b = None
-		self.segments[self.curr_segment] += f"    ;; {tok_a.id} % {tok_b.id}\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} % {tok_b.id}\n"
 
 		# Copying the first data into register
 		# Getting the type of first token
 		if tok_a.value in self.var_stack:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = self.var_stack[tok_a.id].name
 		elif tok_a.name in data_types:
 			if self.assigned_var:
-				self.segments[self.curr_segment] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
+				self.segments[self.curr_segment[-1]] += f"    mov rax, {self.var_stack[tok_a.id].value}\n"
 			else:
-				self.segments[self.curr_segment] += f"    pop rax\n"
+				self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 			type_a = tok_a.name
 		else:
 			error(tok_a, f"Unknown word `{tok_a.id}` used for modular division operation.")
@@ -554,23 +555,23 @@ class Slug:
 		# Copying the second data into register
 		# Getting the type of second token
 		if tok_b.value in self.var_stack:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.var_stack[tok_b.id].value}\n"
 			type_b = self.var_stack[tok_b.id].name
 		elif tok_b.name in data_types:
-			self.segments[self.curr_segment] += f"    mov rbx, {tok_b.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {tok_b.value}\n"
 			type_b = tok_b.name
 		else:
 			error(tok_b, f"Unknown word `{tok_b.id}` used for modular division operation.")
 
 		# Adding them both
-		self.segments[self.curr_segment] += f"    xor rdx, rdx\n"
-		self.segments[self.curr_segment] += f"    div rbx\n"
+		self.segments[self.curr_segment[-1]] += f"    xor rdx, rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    div rbx\n"
 		
 		# If there is a assigned variable then storing in that else pushing it into stack
 		if self.assigned_var:
-			self.segments[self.curr_segment] += f"    mov {self.var_stack[self.assigned_var.id].value}, rdx\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.var_stack[self.assigned_var.id].value}, rdx\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rdx\n"
+			self.segments[self.curr_segment[-1]] += f"    push rdx\n"
 
 		# Type checking
 		if type_a != type_b:
@@ -578,134 +579,134 @@ class Slug:
 
 	""" Conditions """
 	def __equal(self):
-		self.segments[self.curr_segment] += f"    ;; Equals\n"
-		self.segments[self.curr_segment] += f"    mov rcx, 0\n"
-		self.segments[self.curr_segment] += f"    mov rdx, 1\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; Equals\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rcx, 0\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.con_var.value}\n"
-			self.segments[self.curr_segment] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.con_var.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    pop rax\n"
-			self.segments[self.curr_segment] += f"    pop rbx\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rbx\n"
 
-		self.segments[self.curr_segment] += f"    cmp rbx, rax\n"
-		self.segments[self.curr_segment] += f"    cmove rcx, rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    cmp rbx, rax\n"
+		self.segments[self.curr_segment[-1]] += f"    cmove rcx, rdx\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov {self.con_var.value}, rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.con_var.value}, rcx\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    push rcx\n"
 	
 		self.operation = None
 
 	def __less_than(self):
-		self.segments[self.curr_segment] += f"    ;; Less than\n"
-		self.segments[self.curr_segment] += f"    mov rcx, 0\n"
-		self.segments[self.curr_segment] += f"    mov rdx, 1\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; Less than\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rcx, 0\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.con_var.value}\n"
-			self.segments[self.curr_segment] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.con_var.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    pop rax\n"
-			self.segments[self.curr_segment] += f"    pop rbx\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rbx\n"
 
-		self.segments[self.curr_segment] += f"    cmp rbx, rax\n"
-		self.segments[self.curr_segment] += f"    cmovl rcx, rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    cmp rbx, rax\n"
+		self.segments[self.curr_segment[-1]] += f"    cmovl rcx, rdx\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov {self.con_var.value}, rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.con_var.value}, rcx\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    push rcx\n"
 	
 		self.operation = None
 
 	def __greater_than(self):
-		self.segments[self.curr_segment] += f"    ;; Greater than\n"
-		self.segments[self.curr_segment] += f"    mov rcx, 0\n"
-		self.segments[self.curr_segment] += f"    mov rdx, 1\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; Greater than\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rcx, 0\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.con_var.value}\n"
-			self.segments[self.curr_segment] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.con_var.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    pop rax\n"
-			self.segments[self.curr_segment] += f"    pop rbx\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rbx\n"
 
-		self.segments[self.curr_segment] += f"    cmp rbx, rax\n"
-		self.segments[self.curr_segment] += f"    cmovg rcx, rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    cmp rbx, rax\n"
+		self.segments[self.curr_segment[-1]] += f"    cmovg rcx, rdx\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov {self.con_var.value}, rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.con_var.value}, rcx\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    push rcx\n"
 	
 		self.operation = None
 
 	def __less_than_equal(self):
-		self.segments[self.curr_segment] += f"    ;; Less than equal\n"
-		self.segments[self.curr_segment] += f"    mov rcx, 0\n"
-		self.segments[self.curr_segment] += f"    mov rdx, 1\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; Less than equal\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rcx, 0\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.con_var.value}\n"
-			self.segments[self.curr_segment] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.con_var.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    pop rax\n"
-			self.segments[self.curr_segment] += f"    pop rbx\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rbx\n"
 
-		self.segments[self.curr_segment] += f"    cmp rbx, rax\n"
-		self.segments[self.curr_segment] += f"    cmovle rcx, rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    cmp rbx, rax\n"
+		self.segments[self.curr_segment[-1]] += f"    cmovle rcx, rdx\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov {self.con_var.value}, rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.con_var.value}, rcx\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    push rcx\n"
 	
 		self.operation = None
 
 	def __greater_than_equal(self):
-		self.segments[self.curr_segment] += f"    ;; Greater than equal\n"
-		self.segments[self.curr_segment] += f"    mov rcx, 0\n"
-		self.segments[self.curr_segment] += f"    mov rdx, 1\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; Greater than equal\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rcx, 0\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.con_var.value}\n"
-			self.segments[self.curr_segment] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.con_var.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    pop rax\n"
-			self.segments[self.curr_segment] += f"    pop rbx\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rbx\n"
 
-		self.segments[self.curr_segment] += f"    cmp rbx, rax\n"
-		self.segments[self.curr_segment] += f"    cmovge rcx, rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    cmp rbx, rax\n"
+		self.segments[self.curr_segment[-1]] += f"    cmovge rcx, rdx\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov {self.con_var.value}, rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.con_var.value}, rcx\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    push rcx\n"
 	
 		self.operation = None
 	
 	def __not_equal(self):
-		self.segments[self.curr_segment] += f"    ;; Not equal\n"
-		self.segments[self.curr_segment] += f"    mov rcx, 0\n"
-		self.segments[self.curr_segment] += f"    mov rdx, 1\n"
+		self.segments[self.curr_segment[-1]] += f"    ;; Not equal\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rcx, 0\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rdx, 1\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov rbx, {self.con_var.value}\n"
-			self.segments[self.curr_segment] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    mov rbx, {self.con_var.value}\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 		else:
-			self.segments[self.curr_segment] += f"    pop rax\n"
-			self.segments[self.curr_segment] += f"    pop rbx\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+			self.segments[self.curr_segment[-1]] += f"    pop rbx\n"
 
-		self.segments[self.curr_segment] += f"    cmp rbx, rax\n"
-		self.segments[self.curr_segment] += f"    cmovne rcx, rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    cmp rbx, rax\n"
+		self.segments[self.curr_segment[-1]] += f"    cmovne rcx, rdx\n"
 
 		if self.con_var:
-			self.segments[self.curr_segment] += f"    mov {self.con_var.value}, rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    mov {self.con_var.value}, rcx\n"
 		else:
-			self.segments[self.curr_segment] += f"    push rcx\n"
+			self.segments[self.curr_segment[-1]] += f"    push rcx\n"
 	
 		self.operation = None
 
@@ -718,30 +719,30 @@ class Slug:
 			if val.name in OPERATOR:
 				error(val, "Cannot use operators in print functions")
 			elif val.id == NEW_LINE:
-				self.segments[self.curr_segment] += f"    ;; Newline\n"
-				self.segments[self.curr_segment] += f"    puts nl, 1\n\n"
+				self.segments[self.curr_segment[-1]] += f"    ;; Newline\n"
+				self.segments[self.curr_segment[-1]] += f"    puts nl, 1\n\n"
 				param_idx += 1
 			elif val.id in self.var_stack:
 				var = self.var_stack[val.value]
 				if var.name == INT or var.name == FLOAT:
-					self.segments[self.curr_segment] += f"    ;; print {var.id}\n"
-					self.segments[self.curr_segment] += f"    mov rdi, {var.value}\n"
-					self.segments[self.curr_segment] += f"    call print\n\n"
+					self.segments[self.curr_segment[-1]] += f"    ;; print {var.id}\n"
+					self.segments[self.curr_segment[-1]] += f"    mov rdi, {var.value}\n"
+					self.segments[self.curr_segment[-1]] += f"    call print\n\n"
 				elif var.name == STR:
-					self.segments[self.curr_segment] += f"    ;; Puts {val.id}\n"
-					self.segments[self.curr_segment] += f"    puts __{val.id}__, {val.id}_len \n\n"
+					self.segments[self.curr_segment[-1]] += f"    ;; Puts {val.id}\n"
+					self.segments[self.curr_segment[-1]] += f"    puts __{val.id}__, {val.id}_len \n\n"
 				param_idx += 1
 			elif val.name in data_types:
 				if val.name == INT or val.name == FLOAT:
-					self.segments[self.curr_segment] += f"    ;; print {val.value}\n"
-					self.segments[self.curr_segment] += f"    mov rdi, {val.value}\n"
-					self.segments[self.curr_segment] += f"    call print\n\n"
+					self.segments[self.curr_segment[-1]] += f"    ;; print {val.value}\n"
+					self.segments[self.curr_segment[-1]] += f"    mov rdi, {val.value}\n"
+					self.segments[self.curr_segment[-1]] += f"    call print\n\n"
 				elif val.name == STR:
 					self.segments["data"] += f"    str_{self.str_cnt}: dw {val.value}\n"
 					self.segments["data"] += f"    str_{self.str_cnt}_len  equ $ - str_{self.str_cnt}\n"
 	
-					self.segments[self.curr_segment] += f"    ;; Puts {val.value}\n"
-					self.segments[self.curr_segment] += f"    puts str_{self.str_cnt}, str_{self.str_cnt}_len \n\n"
+					self.segments[self.curr_segment[-1]] += f"    ;; Puts {val.value}\n"
+					self.segments[self.curr_segment[-1]] += f"    puts str_{self.str_cnt}, str_{self.str_cnt}_len \n\n"
 	
 					self.str_cnt += 1
 				param_idx += 1
@@ -749,10 +750,10 @@ class Slug:
 				error(val, f"Unknown word \'{val.value}\'");
 	
 	def __return(self):
-		self.segments[self.curr_segment] += f"    pop rax\n"
-		self.segments[self.curr_segment] += f"    mov rbp, rsp\n"
-		self.segments[self.curr_segment] += f"    pop rbp\n"
-		self.segments[self.curr_segment] += f"    ret\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+		self.segments[self.curr_segment[-1]] += f"    mov rbp, rsp\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rbp\n"
+		self.segments[self.curr_segment[-1]] += f"    ret\n"
 		self.operation = None
 	
 	""" Helper functions """
@@ -806,14 +807,14 @@ class Slug:
 								black_lst = [ASSIGN, PLUS_EQ, MINUS_EQ, MULT_EQ, DIV_EQ, MOD_EQ]
 								if self.line[self.token_cnt].value not in black_lst:
 									# Pushing onto the stack
-									self.segments[self.curr_segment] += f"    ;; Pushing {variable.id}\n"
-									self.segments[self.curr_segment] += f"    mov rax, {variable.value}\n"
-									self.segments[self.curr_segment] += f"    push rax\n"
+									self.segments[self.curr_segment[-1]] += f"    ;; Pushing {variable.id}\n"
+									self.segments[self.curr_segment[-1]] += f"    mov rax, {variable.value}\n"
+									self.segments[self.curr_segment[-1]] += f"    push rax\n"
 							else:
 								# Pushing onto the stack
-								self.segments[self.curr_segment] += f"    ;; Pushing {variable.id}\n"
-								self.segments[self.curr_segment] += f"    mov rax, {variable.value}\n"
-								self.segments[self.curr_segment] += f"    push rax\n"
+								self.segments[self.curr_segment[-1]] += f"    ;; Pushing {variable.id}\n"
+								self.segments[self.curr_segment[-1]] += f"    mov rax, {variable.value}\n"
+								self.segments[self.curr_segment[-1]] += f"    push rax\n"
 								self.token_cnt += 1
 
 					elif token.value in self.func_stack:
@@ -834,8 +835,8 @@ class Slug:
 						self.__assign_var(token)	
 					else:
 						# Pusing into the stack
-						self.segments[self.curr_segment] += f"    ;; Pushing {token.value}\n"
-						self.segments[self.curr_segment] += f"    push {token.value}\n"
+						self.segments[self.curr_segment[-1]] += f"    ;; Pushing {token.value}\n"
+						self.segments[self.curr_segment[-1]] += f"    push {token.value}\n"
 
 				elif token.name == OPERATOR:
 					if token.value == ASSIGN:
@@ -947,10 +948,10 @@ class Slug:
 							error(var, f"Undefined reference to word `{var.value}`.")
 						
 						var = self.var_stack[var.value]
-						self.segments[self.curr_segment] += f"    ;; {var.id}++\n"
-						self.segments[self.curr_segment] += f"    pop rax\n"
-						self.segments[self.curr_segment] += f"    inc rax\n"
-						self.segments[self.curr_segment] += f"    mov {var.value}, rax\n"
+						self.segments[self.curr_segment[-1]] += f"    ;; {var.id}++\n"
+						self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+						self.segments[self.curr_segment[-1]] += f"    inc rax\n"
+						self.segments[self.curr_segment[-1]] += f"    mov {var.value}, rax\n"
 						self.token_cnt += 1
 
 					elif token.value == DEC:
@@ -961,10 +962,10 @@ class Slug:
 							error(var, f"Undefined reference to word `{var.value}`.")
 
 						var = self.var_stack[var.value]
-						self.segments[self.curr_segment] += f"    ;; {var.id}--\n"
-						self.segments[self.curr_segment] += f"    pop rax\n"
-						self.segments[self.curr_segment] += f"    dec rax\n"
-						self.segments[self.curr_segment] += f"    mov {var.value}, rax\n"
+						self.segments[self.curr_segment[-1]] += f"    ;; {var.id}--\n"
+						self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+						self.segments[self.curr_segment[-1]] += f"    dec rax\n"
+						self.segments[self.curr_segment[-1]] += f"    mov {var.value}, rax\n"
 						self.token_cnt += 1
 
 				elif token.name == CONDITION:
@@ -1066,8 +1067,9 @@ class Slug:
 
 						new_addr = Addr(IF, None, self.addr_cnt, False, False)
 						self.addr_stack.append(new_addr)
-						self.segments[self.curr_segment] += f"    ;; If\n"
-						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_if:\n"
+						self.segments[self.curr_segment[-1]] += f"    ;; If\n"
+						self.segments[self.curr_segment[-1]] += f"addr_{self.addr_stack[self.addr_cnt].id}_if:\n"
+						self.segments.update({f"addr_{self.addr_stack[self.addr_cnt].id}_if": ""})
 						self.__start_scope()
 
 					elif token.value == THEN:
@@ -1086,20 +1088,26 @@ class Slug:
 							self.operation()
 
 						if self.ret_stack: self.ret_stack -= 1
-						self.segments[self.curr_segment] += f"    ;; Then\n"
-						self.segments[self.curr_segment] += f"    pop rax\n"
-						self.segments[self.curr_segment] += f"    cmp rax, 1\n"
-						self.segments[self.curr_segment] += f"    je  addr_{self.addr_stack[self.addr_cnt].id}_then\n"
-						self.segments[self.curr_segment] += f"    jne addr_{self.addr_stack[self.addr_cnt].id}_else\n"
+						self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_if"] += f"    ;; Then\n"
+						self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_if"] += f"    pop rax\n"
+						self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_if"] += f"    cmp rax, 1\n"
+						self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_if"] += f"    je  addr_{self.addr_stack[self.addr_cnt].id}_then\n"
 
-						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_then:\n"
+						self.curr_segment.append(f"addr_{self.addr_stack[self.addr_cnt].id}_then")
+						self.segments.update({f"addr_{self.addr_stack[self.addr_cnt].id}_then": ""})
+
+						self.segments[self.curr_segment[-1]] += f"addr_{self.addr_stack[self.addr_cnt].id}_then:\n"
 
 					elif token.value == ELSE:
 						self.__end_scope()
 						self.__start_scope()
 						self.token_cnt += 1
-						self.segments[self.curr_segment] += f"    jmp addr_{self.addr_stack[self.addr_cnt].id}_end\n"
-						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_else:\n"
+						self.segments.update({f"addr_{self.addr_stack[self.addr_cnt].id}_else": ""})
+						self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_if"] += f"    jne addr_{self.addr_stack[self.addr_cnt].id}_else\n"
+						self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_else"] += f"    jmp addr_{self.addr_stack[self.addr_cnt].id}_end\n"
+						self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_else"] += f"addr_{self.addr_stack[self.addr_cnt].id}_else:\n"
+						self.curr_segment.pop()
+						self.curr_segment.append(f"addr_{self.addr_stack[self.addr_cnt].id}_else")
 
 					elif token.value == END:
 						self.__end_scope()
@@ -1107,20 +1115,34 @@ class Slug:
 						self.token_cnt += 1
 						addr = self.addr_stack[self.addr_cnt]
 						if addr.type == IF:
-							self.segments[self.curr_segment] += f"    jmp addr_{addr.id}_end\n"
-							self.segments[self.curr_segment] += f"addr_{addr.id}_end:\n"
+							print(self.curr_segment)
+							self.curr_segment.pop()
+							print(self.curr_segment)
+							self.segments[self.curr_segment[-1]] += self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_if"]
+							self.segments[self.curr_segment[-1]] += self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_then"]
+							if f"addr_{self.addr_stack[self.addr_cnt].id}_else" in self.segments:
+								self.segments[self.curr_segment[-1]] += self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_else"]
+							self.segments[self.curr_segment[-1]] += f"    jmp addr_{addr.id}_end\n"
+							self.segments[self.curr_segment[-1]] += f"addr_{addr.id}_end:\n"
+							self.segments.pop(f"addr_{self.addr_stack[self.addr_cnt].id}_if")
+							self.segments.pop(f"addr_{self.addr_stack[self.addr_cnt].id}_then")
+							if f"addr_{self.addr_stack[self.addr_cnt].id}_else" in self.segments:
+								self.segments.pop(f"addr_{self.addr_stack[self.addr_cnt].id}_else")
+
 						elif addr.type == WHILE:
-							self.segments[self.curr_segment] += f"    jmp addr_{addr.id}_while\n"
-							self.segments[self.curr_segment] += f"addr_{addr.id}_end:\n"
+							self.segments[self.curr_segment[-1]] += f"    jmp addr_{addr.id}_while\n"
+							self.segments[self.curr_segment[-1]] += f"addr_{addr.id}_end:\n"
 						elif addr.type == FUNC:
 							if not addr.start:
 								error(self.func_stack[addr.name], f"Missing `in` token in function `{addr.name}`.")
-							self.segments[self.curr_segment] += f"    push 0\n"
-							self.segments[self.curr_segment] += f"    pop rax\n"
-							self.segments[self.curr_segment] += f"    mov rbp, rsp\n"
-							self.segments[self.curr_segment] += f"    pop rbp\n"
-							self.segments[self.curr_segment] += f"    ret\n"
-							self.curr_segment = "text"
+							self.segments[self.curr_segment[-1]] += f"    push 0\n"
+							self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+							self.segments[self.curr_segment[-1]] += f"    mov rbp, rsp\n"
+							self.segments[self.curr_segment[-1]] += f"    pop rbp\n"
+							self.segments[self.curr_segment[-1]] += f"    ret\n"
+
+							if self.curr_segment:
+								self.curr_segment.pop()
 							if self.curr_func:
 								self.curr_func.pop()
 
@@ -1141,8 +1163,8 @@ class Slug:
 
 						new_addr = Addr(WHILE, None, self.addr_cnt, False, False)
 						self.addr_stack.append(new_addr)
-						self.segments[self.curr_segment] += f"    ;; While\n"
-						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_while:\n"
+						self.segments[self.curr_segment[-1]] += f"    ;; While\n"
+						self.segments[self.curr_segment[-1]] += f"addr_{self.addr_stack[self.addr_cnt].id}_while:\n"
 
 					elif token.value == DO:
 						self.__end_scope()
@@ -1161,19 +1183,19 @@ class Slug:
 							self.operation()
 
 						if self.ret_stack: self.ret_stack -= 1
-						self.segments[self.curr_segment] += f"    ;; Do\n"
-						self.segments[self.curr_segment] += f"    pop rax\n"
-						self.segments[self.curr_segment] += f"    cmp rax, 1\n"
-						self.segments[self.curr_segment] += f"    je  addr_{self.addr_stack[self.addr_cnt].id}_do\n"
-						self.segments[self.curr_segment] += f"    jne addr_{self.addr_stack[self.addr_cnt].id}_end\n"
+						self.segments[self.curr_segment[-1]] += f"    ;; Do\n"
+						self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+						self.segments[self.curr_segment[-1]] += f"    cmp rax, 1\n"
+						self.segments[self.curr_segment[-1]] += f"    je  addr_{self.addr_stack[self.addr_cnt].id}_do\n"
+						self.segments[self.curr_segment[-1]] += f"    jne addr_{self.addr_stack[self.addr_cnt].id}_end\n"
 
-						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_do:\n"
+						self.segments[self.curr_segment[-1]] += f"addr_{self.addr_stack[self.addr_cnt].id}_do:\n"
 
 					elif token.value == FUNC:
 						self.__start_scope()
 
 						# Telling the compiler we encountered a function
-						self.curr_segment = "func"
+						self.curr_segment.append("func")
 
 						name = self.line[self.token_cnt + 1]
 						self.token_cnt += 2
@@ -1193,10 +1215,10 @@ class Slug:
 						new_func = Func(name.value, f"func_{self.addr_stack[self.addr_cnt].id}_{name.value}", [], None, name.row, name.col, name.file)
 						self.curr_func.append(new_func.name)
 
-						self.segments[self.curr_segment] += f";; {new_func.name}\n"
-						self.segments[self.curr_segment] += new_func.id + ":\n" 
-						self.segments[self.curr_segment] += f"    push rbp\n"
-						self.segments[self.curr_segment] += f"    mov rbp, rsp\n"
+						self.segments[self.curr_segment[-1]] += f";; {new_func.name}\n"
+						self.segments[self.curr_segment[-1]] += new_func.id + ":\n" 
+						self.segments[self.curr_segment[-1]] += f"    push rbp\n"
+						self.segments[self.curr_segment[-1]] += f"    mov rbp, rsp\n"
 
 						# Saving it in the function stack
 						self.func_stack.update({name.value : new_func})
@@ -1357,17 +1379,17 @@ class Slug:
 						self.func_stack[self.called_func[-1]].ret_var = None
 
 
-						self.segments[self.curr_segment] += f"    ;; Call {self.called_func[-1]}\n"
-						self.segments[self.curr_segment] += f"    call {self.func_stack[self.called_func[-1]].id}\n"
+						self.segments[self.curr_segment[-1]] += f"    ;; Call {self.called_func[-1]}\n"
+						self.segments[self.curr_segment[-1]] += f"    call {self.func_stack[self.called_func[-1]].id}\n"
 
 						# Poping the parameters of the function
 						for i in range(len(self.func_stack[self.called_func[-1]].params)):
-							self.segments[self.curr_segment] += f"    pop rbx\n"
+							self.segments[self.curr_segment[-1]] += f"    pop rbx\n"
 
 						if self.assigned_var:
-							self.segments[self.curr_segment] += f"    mov {self.assigned_var.value}, rax\n"
+							self.segments[self.curr_segment[-1]] += f"    mov {self.assigned_var.value}, rax\n"
 						else:
-							self.segments[self.curr_segment] += f"    push rax\n"
+							self.segments[self.curr_segment[-1]] += f"    push rax\n"
 							self.ret_stack += 1
 
 						self.called_func.pop()
