@@ -2,8 +2,8 @@
 import os
 import sys
 
-#TODO: [ ] Include files
 #TODO: [ ] Add syscalls
+#TODO: [X] Include files
 
 WORD = "word"
 COMMENT = "#"
@@ -46,6 +46,8 @@ conditions = [LT, GT, EQUAL, LTE, GTE, NT]
 
 # Special keywords 
 PRINT    = "print"
+DEFINE   = "%define"
+INCLUDE  = "include"
 NEW_LINE = ","
 IF       = "if"
 THEN     = "then"
@@ -61,7 +63,7 @@ RETURN   = "return"
 BRACK_OPEN = "("
 BRACK_CLOSE = ")"
 KEYWORD  = "keyword"
-keywords = [PRINT, NEW_LINE, IF, THEN, ELSE, END, WHILE, DO, FUNC, IN, PARAM, RET_TYPE, RETURN, BRACK_OPEN, BRACK_CLOSE]
+keywords = [PRINT, DEFINE, INCLUDE, NEW_LINE, IF, THEN, ELSE, END, WHILE, DO, FUNC, IN, PARAM, RET_TYPE, RETURN, BRACK_OPEN, BRACK_CLOSE]
 
 def error(token, msg):
 	print(f"\033[91mError: {token.file}\033[0m:{str(token.row)}:{str(token.col)}: {msg}", file=sys.stderr)
@@ -132,12 +134,8 @@ def chop_word(line, file):
 	line = line[1] 
 
 	# Delimeter to chop the word from apart from spaces and tabs
-	delim = []
-	delim.append(BRACK_OPEN)
-	delim.append(BRACK_CLOSE)
-	delim.append(COMMENT)
-
 	i = 0
+	delim = [BRACK_OPEN, BRACK_CLOSE, COMMENT]
 	while i < len(line):
 		ch = line[i]
 
@@ -228,27 +226,20 @@ def lex_file(file):
 
 class Slug:
 	def __init__(self, file, program):
-		self.file = file
+		self.file = os.path.abspath(file)
 		self.asm_file = file.strip(".slug") + ".asm"
 		self.obj_file = file.strip(".slug") + ".o"
 		self.exe_file = file.strip(".slug")
 		self.program = program
 
 		# Segments for assembly
-		self.text_segment = ""
-		self.bss_segment  = ""
-		self.data_segment = ""
-		self.exit_segment = ""
-		self.func_segment = ""
 		self.segments = {
-				"text": self.text_segment,
-				"bss" : self.bss_segment,
-				"data": self.data_segment,
-				"exit": self.exit_segment,
-				"func": self.func_segment,
-				"if"  : "",
-				"then": "",
-				"else": ""
+				"text"  : "", 
+				"bss"   : "", 
+				"data"  : "", 
+				"exit"  : "", 
+				"func"  : "", 
+				"define": ""
 		}
 		self.curr_segment = ["text"]
 
@@ -257,9 +248,11 @@ class Slug:
 		self.line = []
 		self.addr_stack = []
 		self.var_stack = {}
+		self.define_stack = {}
 		self.func_stack = {}
 		self.called_func  = []
 		self.curr_func    = []
+		self.include_files = [self.file]
 		self.ret_stack = 0
 
 		# Flags
@@ -732,6 +725,16 @@ class Slug:
 					self.segments[self.curr_segment[-1]] += f"    ;; Puts {val.id}\n"
 					self.segments[self.curr_segment[-1]] += f"    puts __{val.id}__, {val.id}_len \n\n"
 				param_idx += 1
+			elif val.id in self.define_stack:
+				var = self.define_stack[val.value]
+				if var.name == INT or var.name == FLOAT:
+					self.segments[self.curr_segment[-1]] += f"    ;; print {var.id}\n"
+					self.segments[self.curr_segment[-1]] += f"    mov rdi, {var.value}\n"
+					self.segments[self.curr_segment[-1]] += f"    call print\n\n"
+				elif var.name == STR:
+					self.segments[self.curr_segment[-1]] += f"    ;; Puts {val.id}\n"
+					self.segments[self.curr_segment[-1]] += f"    puts __{val.id}__, {val.id}_len \n\n"
+				param_idx += 1
 			elif val.name in data_types:
 				if val.name == INT or val.name == FLOAT:
 					self.segments[self.curr_segment[-1]] += f"    ;; print {val.value}\n"
@@ -1060,6 +1063,55 @@ class Slug:
 						params = self.line[self.token_cnt + 1:]
 						self.token_cnt = len(self.line)
 						self.__print(params)
+
+					elif token.value == INCLUDE:
+						self.token_cnt += 1
+						if self.token_cnt >= len(self.line):
+							error(token, f"Include token expected a path to the file but got nothing.")
+
+						file = self.line[self.token_cnt]
+						self.token_cnt += 1
+						if file.name != STR:
+							error(file, f"File path should be `str` but got `{file.name}`.")
+
+						# Converting to the absolute path
+						file_path = file.value[1:len(file.value)-1:]
+						file_path = os.path.abspath(file_path)
+						if file_path in self.include_files:
+							error(file, f"Multiple inclusion of file `{file_path}`.")
+
+						if not os.path.isfile(file_path):
+							error(file, f"Cannot find file `{file_path}`.")
+
+						# Adding the path in the included files
+						self.include_files.append(file_path)
+
+						# Generating the tokens of the new file and pushing it into the original program
+						new_program = list(reversed(lex_file(file_path)))
+						for i in new_program:
+							self.program.insert(self.prog_cnt, i)
+
+					elif token.value == DEFINE:
+						params = self.line[self.token_cnt + 1:]
+						self.token_cnt = len(self.line)
+						if len(params) != 2:
+							error(token, f"`%define` keyword accpets only two argument: [name] [value] but recevied `{len(params)}`.")
+
+						name = params[0]
+						if name.name != WORD:
+							error(name, f"`%define` keyword only accept `word` as a name but got `{name.name}`.")
+						value = params[1]
+						if value.name != "int":
+							error(value, f"`%define` keyword only accept `int` as a value but got `{value.name}`.")
+						if name.value in self.define_stack:
+							error(name, f"Name `{name.value}` has already been defined.")
+
+						variable = Token(value.name, name.value, name.value, token.row, token.col, token.file)
+						if value.name == INT or value.name == FLOAT:
+							self.segments["define"] += f"%define __{variable.id}__ {value.value}\n"
+
+						variable.value = f"__{variable.id}__"
+						self.define_stack.update({variable.id: variable})
 
 					elif token.value == IF:
 						self.token_cnt += 1
@@ -1485,6 +1537,8 @@ class Slug:
 
 		# Writing into assembly file
 		self.out_file = open(self.asm_file, "w")
+		self.out_file.write(self.segments["define"])
+		self.out_file.write("\n")
 		self.out_file.write(puts_macro)
 		self.out_file.write("\n")
 		self.out_file.write(print_func)
