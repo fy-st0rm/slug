@@ -258,6 +258,8 @@ class Slug:
 		self.var_stack = {}
 		self.func_stack = {}
 		self.called_func  = []
+		self.curr_func    = []
+		self.ret_stack = 0
 
 		# Flags
 		self.assigned_var = None
@@ -289,6 +291,10 @@ class Slug:
 
 		for i in self.curr_scope.vars:
 			self.var_stack.pop(i)
+
+		for i in range(self.ret_stack):
+			self.segments[self.curr_segment] += f"    pop rax\n"
+		self.ret_stack = 0
 
 		# Gives the previous scope
 		for i in range(len(self.scopes) - 1, -1, -1):
@@ -745,9 +751,9 @@ class Slug:
 	def __return(self):
 		self.segments[self.curr_segment] += f"    pop rax\n"
 		#TODO: Add a proper return system
-		#self.segments[self.curr_segment] += f"    mov rbp, rsp\n"
-		#self.segments[self.curr_segment] += f"    pop rbp\n"
-		#self.segments[self.curr_segment] += f"    ret\n"
+		self.segments[self.curr_segment] += f"    mov rbp, rsp\n"
+		self.segments[self.curr_segment] += f"    pop rbp\n"
+		self.segments[self.curr_segment] += f"    ret\n"
 		self.operation = None
 	
 	""" Helper functions """
@@ -936,24 +942,30 @@ class Slug:
 
 					elif token.value == INC:
 						var = self.line[self.token_cnt - 1]
+						if self.token_cnt == 0:
+							error(var, f"Token `{var.value}` requires one operand.")
 						if var.value not in self.var_stack:
 							error(var, f"Undefined reference to word `{var.value}`.")
-
-						self.segments[self.curr_segment] += f"    ;; {var.value}++\n"
+						
+						var = self.var_stack[var.value]
+						self.segments[self.curr_segment] += f"    ;; {var.id}++\n"
 						self.segments[self.curr_segment] += f"    pop rax\n"
 						self.segments[self.curr_segment] += f"    inc rax\n"
-						self.segments[self.curr_segment] += f"    mov [{var.value}], rax\n"
+						self.segments[self.curr_segment] += f"    mov {var.value}, rax\n"
 						self.token_cnt += 1
 
 					elif token.value == DEC:
 						var = self.line[self.token_cnt - 1]
+						if self.token_cnt == 0:
+							error(var, f"Token `{var.value}` requires one operand.")
 						if var.value not in self.var_stack:
 							error(var, f"Undefined reference to word `{var.value}`.")
 
-						self.segments[self.curr_segment] += f"    ;; {var.value}--\n"
+						var = self.var_stack[var.value]
+						self.segments[self.curr_segment] += f"    ;; {var.id}--\n"
 						self.segments[self.curr_segment] += f"    pop rax\n"
 						self.segments[self.curr_segment] += f"    dec rax\n"
-						self.segments[self.curr_segment] += f"    mov [{var.value}], rax\n"
+						self.segments[self.curr_segment] += f"    mov {var.value}, rax\n"
 						self.token_cnt += 1
 
 				elif token.name == CONDITION:
@@ -1060,6 +1072,8 @@ class Slug:
 						self.__start_scope()
 
 					elif token.value == THEN:
+						self.__end_scope()
+						self.__start_scope()
 						self.token_cnt += 1
 
 						if self.addr_cnt < 0:
@@ -1072,6 +1086,7 @@ class Slug:
 						if self.operation:
 							self.operation()
 
+						if self.ret_stack: self.ret_stack -= 1
 						self.segments[self.curr_segment] += f"    ;; Then\n"
 						self.segments[self.curr_segment] += f"    pop rax\n"
 						self.segments[self.curr_segment] += f"    cmp rax, 1\n"
@@ -1079,17 +1094,17 @@ class Slug:
 						self.segments[self.curr_segment] += f"    jne addr_{self.addr_stack[self.addr_cnt].id}_else\n"
 
 						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_then:\n"
-						self.__end_scope()
-						self.__start_scope()
 
 					elif token.value == ELSE:
+						self.__end_scope()
+						self.__start_scope()
 						self.token_cnt += 1
 						self.segments[self.curr_segment] += f"    jmp addr_{self.addr_stack[self.addr_cnt].id}_end\n"
 						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_else:\n"
-						self.__end_scope()
-						self.__start_scope()
 
 					elif token.value == END:
+						self.__end_scope()
+
 						self.token_cnt += 1
 						addr = self.addr_stack[self.addr_cnt]
 						if addr.type == IF:
@@ -1101,10 +1116,14 @@ class Slug:
 						elif addr.type == FUNC:
 							if not addr.start:
 								error(self.func_stack[addr.name], f"Missing `in` token in function `{addr.name}`.")
+							self.segments[self.curr_segment] += f"    push 0\n"
+							self.segments[self.curr_segment] += f"    pop rax\n"
 							self.segments[self.curr_segment] += f"    mov rbp, rsp\n"
 							self.segments[self.curr_segment] += f"    pop rbp\n"
 							self.segments[self.curr_segment] += f"    ret\n"
 							self.curr_segment = "text"
+							if self.curr_func:
+								self.curr_func.pop()
 
 						# Telling that this address has ended
 						self.addr_stack[self.addr_cnt].end = True
@@ -1116,9 +1135,8 @@ class Slug:
 								self.addr_cnt = 0
 								break
 
-						self.__end_scope()
-
 					elif token.value == WHILE:
+						self.__start_scope()
 						self.token_cnt += 1
 						self.addr_cnt = len(self.addr_stack)
 
@@ -1126,9 +1144,11 @@ class Slug:
 						self.addr_stack.append(new_addr)
 						self.segments[self.curr_segment] += f"    ;; While\n"
 						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_while:\n"
-						self.__start_scope()
 
 					elif token.value == DO:
+						self.__end_scope()
+						self.__start_scope()
+
 						self.token_cnt += 1
 
 						if self.addr_cnt < 0:
@@ -1141,6 +1161,7 @@ class Slug:
 						if self.operation:
 							self.operation()
 
+						if self.ret_stack: self.ret_stack -= 1
 						self.segments[self.curr_segment] += f"    ;; Do\n"
 						self.segments[self.curr_segment] += f"    pop rax\n"
 						self.segments[self.curr_segment] += f"    cmp rax, 1\n"
@@ -1149,10 +1170,9 @@ class Slug:
 
 						self.segments[self.curr_segment] += f"addr_{self.addr_stack[self.addr_cnt].id}_do:\n"
 
-						self.__end_scope()
+					elif token.value == FUNC:
 						self.__start_scope()
 
-					elif token.value == FUNC:
 						# Telling the compiler we encountered a function
 						self.curr_segment = "func"
 
@@ -1172,6 +1192,7 @@ class Slug:
 						self.addr_stack.append(new_addr)
 
 						new_func = Func(name.value, f"func_{self.addr_stack[self.addr_cnt].id}_{name.value}", [], None, name.row, name.col, name.file)
+						self.curr_func.append(new_func.name)
 
 						self.segments[self.curr_segment] += f";; {new_func.name}\n"
 						self.segments[self.curr_segment] += new_func.id + ":\n" 
@@ -1180,8 +1201,6 @@ class Slug:
 
 						# Saving it in the function stack
 						self.func_stack.update({name.value : new_func})
-
-						self.__start_scope()
 
 					elif token.value == PARAM:
 						self.token_cnt += 1
@@ -1266,7 +1285,7 @@ class Slug:
 						self.token_cnt += 1
 
 						# Type checking of return 
-						func = self.func_stack[self.addr_stack[self.addr_cnt].name]
+						func = self.func_stack[self.curr_func[-1]]
 						if self.token_cnt < len(self.line):
 							token = self.line[self.token_cnt]
 							type = None
@@ -1350,6 +1369,7 @@ class Slug:
 							self.segments[self.curr_segment] += f"    mov {self.assigned_var.value}, rax\n"
 						else:
 							self.segments[self.curr_segment] += f"    push rax\n"
+							self.ret_stack += 1
 
 						self.called_func.pop()
 
