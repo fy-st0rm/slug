@@ -1,0 +1,6 @@
+func write : str text int len -> int in
+	syscall4 1 1 text len
+end
+
+str text = "Hello world"
+write(text 11)

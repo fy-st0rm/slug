@@ -2,7 +2,7 @@
 import os
 import sys
 
-#TODO: [ ] Add syscalls
+#TODO: [X] Add syscalls
 #TODO: [X] Include files
 
 WORD = "word"
@@ -45,9 +45,6 @@ CONDITION = "condition"
 conditions = [LT, GT, EQUAL, LTE, GTE, NT]
 
 # Special keywords 
-PRINT    = "print"
-DEFINE   = "%define"
-INCLUDE  = "include"
 NEW_LINE = ","
 IF       = "if"
 THEN     = "then"
@@ -63,7 +60,22 @@ RETURN   = "return"
 BRACK_OPEN = "("
 BRACK_CLOSE = ")"
 KEYWORD  = "keyword"
-keywords = [PRINT, DEFINE, INCLUDE, NEW_LINE, IF, THEN, ELSE, END, WHILE, DO, FUNC, IN, PARAM, RET_TYPE, RETURN, BRACK_OPEN, BRACK_CLOSE]
+keywords = [NEW_LINE, IF, THEN, ELSE, END, WHILE, DO, FUNC, IN, PARAM, RET_TYPE, RETURN, BRACK_OPEN, BRACK_CLOSE]
+
+# Intrinsics
+PRINT      = "print"
+DEFINE     = "%define"
+INCLUDE    = "include"
+SYSCALL1   = "syscall1"
+SYSCALL2   = "syscall2"
+SYSCALL3   = "syscall3"
+SYSCALL4   = "syscall4"
+SYSCALL5   = "syscall5"
+SYSCALL6   = "syscall6"
+SYSCALL7   = "syscall7"
+INTRINSIC  = "intrinsic"
+intrinsics = [PRINT, DEFINE, INCLUDE, SYSCALL1, SYSCALL2, SYSCALL3, SYSCALL4, SYSCALL5, SYSCALL6, SYSCALL7]
+
 
 def error(token, msg):
 	print(f"\033[91mError: {token.file}\033[0m:{str(token.row)}:{str(token.col)}: {msg}", file=sys.stderr)
@@ -202,6 +214,8 @@ def create_token(program, words):
 			line.append(Token(STR, word, word, row, col, file))
 		elif word in keywords:
 			line.append(Token(KEYWORD, word, word, row, col, file))
+		elif word in intrinsics:
+			line.append(Token(INTRINSIC, word, word, row, col, file))
 		elif word == COMMENT:
 			line.append(Token(COMMENT, word, word, row, col, file))
 			cmt_start = True
@@ -313,12 +327,16 @@ class Slug:
 		if self.curr_scope.id == 0:
 			if type == INT or type == FLOAT:
 				self.segments["bss"]  += f"    __{variable.value}__: resd 32\n"
+				variable.value = f"[__{variable.value}__]"
 			elif type == STR:
 				self.segments["data"] += f"    __{variable.value}__: dw "
-			variable.value = f"[__{variable.value}__]"
+				variable.value = f"__{variable.value}__"
 		else:
-			variable.value = f"[rbp - {self.local_var_cnt + 8}]"
-			self.local_var_cnt += 8
+			if type == INT or type == FLOAT:
+				variable.value = f"[rbp - {self.local_var_cnt + 8}]"
+				self.local_var_cnt += 8
+			elif type == STR:
+				variable.value = f"str_{self.str_cnt}"
 			self.curr_scope.vars.append(variable.id)
 		
 		self.var_stack.update({variable.id : variable})
@@ -336,9 +354,13 @@ class Slug:
 				self.segments[self.curr_segment[-1]] += f"    ;; {self.assigned_var.id} = {value.id}\n"
 				self.segments[self.curr_segment[-1]] += f"    mov dword {self.assigned_var.value}, {value.value}\n"
 			elif value.name == STR:
-				self.segments["data"] += f"{value.value}\n"	
-				self.segments["data"] += f"    {self.assigned_var.id}_len  equ $ - __{self.assigned_var.id}__\n"
-				self.str_cnt += 1
+				if self.curr_scope.id == 0:
+					self.segments["data"] += f"{value.value}\n"	
+					self.segments["data"] += f"    {self.assigned_var.id}_len  equ $ - __{self.assigned_var.id}__\n"
+				else:
+					self.segments["data"] += f"    str_{self.str_cnt}: dw {value.value}\n"
+					self.segments["data"] += f"    str_{self.str_cnt}_len  equ $ - str_{self.str_cnt}\n"
+					self.str_cnt += 1
 		else:
 			self.segments[self.curr_segment[-1]] += f"    ;; {self.assigned_var.id} = {value.id}\n"
 			self.segments[self.curr_segment[-1]] += f"    mov rax, {value.value}\n"
@@ -703,7 +725,7 @@ class Slug:
 	
 		self.operation = None
 
-	""" Special keywords """
+	""" INTRINSICS """
 	def __print(self, params):
 		param_idx = 0
 		while param_idx < len(params):
@@ -752,6 +774,70 @@ class Slug:
 			else:
 				error(val, f"Unknown word \'{val.value}\'");
 	
+	def __syscall1(self):
+		self.segments[self.curr_segment[-1]] += f"    ;; Syscall 1\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+		self.segments[self.curr_segment[-1]] += f"    syscall\n"
+		self.operation = None
+
+	def __syscall2(self):
+		self.segments[self.curr_segment[-1]] += f"    ;; Syscall 2\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+		self.segments[self.curr_segment[-1]] += f"    syscall\n"
+		self.operation = None
+		
+	def __syscall3(self):
+		self.segments[self.curr_segment[-1]] += f"    ;; Syscall 3\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rsi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+		self.segments[self.curr_segment[-1]] += f"    syscall\n"
+		self.operation = None
+
+	def __syscall4(self):
+		self.segments[self.curr_segment[-1]] += f"    ;; Syscall 4\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rsi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+		self.segments[self.curr_segment[-1]] += f"    syscall\n"
+		self.operation = None
+
+	def __syscall5(self):
+		self.segments[self.curr_segment[-1]] += f"    ;; Syscall 5\n"
+		self.segments[self.curr_segment[-1]] += f"    pop r10\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rsi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+		self.segments[self.curr_segment[-1]] += f"    syscall\n"
+		self.operation = None
+
+	def __syscall6(self):
+		self.segments[self.curr_segment[-1]] += f"    ;; Syscall 6\n"
+		self.segments[self.curr_segment[-1]] += f"    pop r8\n"
+		self.segments[self.curr_segment[-1]] += f"    pop r10\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rsi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+		self.segments[self.curr_segment[-1]] += f"    syscall\n"
+		self.operation = None
+
+	def __syscall7(self):
+		self.segments[self.curr_segment[-1]] += f"    ;; Syscall 7\n"
+		self.segments[self.curr_segment[-1]] += f"    pop r9\n"
+		self.segments[self.curr_segment[-1]] += f"    pop r8\n"
+		self.segments[self.curr_segment[-1]] += f"    pop r10\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdx\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rsi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rdi\n"
+		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+		self.segments[self.curr_segment[-1]] += f"    syscall\n"
+		self.operation = None
+	
+	""" Keywords """
 	def __return(self):
 		self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 		self.segments[self.curr_segment[-1]] += f"    mov rbp, rsp\n"
@@ -838,8 +924,17 @@ class Slug:
 						self.__assign_var(token)	
 					else:
 						# Pusing into the stack
-						self.segments[self.curr_segment[-1]] += f"    ;; Pushing {token.value}\n"
-						self.segments[self.curr_segment[-1]] += f"    push {token.value}\n"
+						if token.name == INT or token.name == FLOAT:
+							self.segments[self.curr_segment[-1]] += f"    ;; Pushing {token.value}\n"
+							self.segments[self.curr_segment[-1]] += f"    push {token.value}\n"
+						elif token.name == STR:
+							self.segments["data"] += f"    str_{self.str_cnt}: dw {token.value}\n"
+							self.segments["data"] += f"    str_{self.str_cnt}_len  equ $ - str_{self.str_cnt}\n"
+			
+							self.segments[self.curr_segment[-1]] += f"    ;; Pusing {token.value}\n"
+							self.segments[self.curr_segment[-1]] += f"    push str_{self.str_cnt}\n"
+			
+							self.str_cnt += 1
 
 				elif token.name == OPERATOR:
 					if token.value == ASSIGN:
@@ -1057,8 +1152,7 @@ class Slug:
 						# Putting the function pointer
 						self.operation = self.__not_equal
 
-				elif token.name == KEYWORD:
-
+				elif token.name == INTRINSIC:
 					if token.value == PRINT:
 						params = self.line[self.token_cnt + 1:]
 						self.token_cnt = len(self.line)
@@ -1113,7 +1207,50 @@ class Slug:
 						variable.value = f"__{variable.id}__"
 						self.define_stack.update({variable.id: variable})
 
-					elif token.value == IF:
+					elif token.value == SYSCALL1:
+						self.token_cnt += 1
+						if self.operation:
+							self.operation()
+						self.operation = self.__syscall1
+
+					elif token.value == SYSCALL2:
+						self.token_cnt += 1
+						if self.operation:
+							self.operation()
+						self.operation = self.__syscall2
+						
+					elif token.value == SYSCALL3:
+						self.token_cnt += 1
+						if self.operation:
+							self.operation()
+						self.operation = self.__syscall3
+
+					elif token.value == SYSCALL4:
+						self.token_cnt += 1
+						if self.operation:
+							self.operation()
+						self.operation = self.__syscall4
+
+					elif token.value == SYSCALL5:
+						self.token_cnt += 1
+						if self.operation:
+							self.operation()
+						self.operation = self.__syscall5
+
+					elif token.value == SYSCALL6:
+						self.token_cnt += 1
+						if self.operation:
+							self.operation()
+						self.operation = self.__syscall6
+
+					elif token.value == SYSCALL7:
+						self.token_cnt += 1
+						if self.operation:
+							self.operation()
+						self.operation = self.__syscall7
+						
+				elif token.name == KEYWORD:
+					if token.value == IF:
 						self.token_cnt += 1
 						self.addr_cnt = len(self.addr_stack)
 
@@ -1445,6 +1582,10 @@ class Slug:
 							self.ret_stack += 1
 
 						self.called_func.pop()
+
+					elif token.value == NEW_LINE:
+						self.token_cnt += 1
+						self.segments[self.curr_segment[-1]] += f"    push nl\n"
 
 					else:
 						error(token, "Invalid syntax.")
