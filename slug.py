@@ -2,18 +2,23 @@
 import os
 import sys
 
-#TODO: [X] Add syscalls
-#TODO: [X] Include files
+#TODO: [ ] Introduce arrays
+#TODO: [ ] Introduce the characters and make strings as like it does in the C
+#TODO: [ ] Deal with strings ( Assignment, Join strings, read characters, remove characters, comparable )
+#TODO: [ ] Deal with floating point numbers
 
 WORD = "word"
 COMMENT = "#"
 
 # Data types
 INT = "int"
+INT_ARR = "int*"
 STR = "str"
 FLOAT = "float"
+CHAR = "char"
+VOID = "void"
 DATA_TYPE = "data_type"
-data_types = [INT, STR, FLOAT]
+data_types = [INT, STR, FLOAT, VOID]
 
 # Operators
 PLUS     = "+"
@@ -90,9 +95,9 @@ def is_float(val):
 
 class Token:
 	def __init__(self, name, id, value, row, col, file):
-		self.name = name
-		self.id = id
-		self.value = value
+		self.name = name		# Type of the token eg (WORD, DATATYPE, KEYWORD, INT, STR)
+		self.id = id			# Name of the token especially variables defined by the user
+		self.value = value		# Name of the token especially variables in assembly space
 		self.row = row
 		self.col = col
 		self.file = file
@@ -102,35 +107,35 @@ class Token:
 
 class Scope:
 	def __init__(self, id, start, end):
-		self.id = id
-		self.start = start
-		self.end = end
-		self.vars = []
+		self.id = id			# Index of the scope in a scope stack
+		self.start = start		# Start flag of the scope
+		self.end = end			# End flag of the scope
+		self.vars = []			# Variables declared inside of this scope (Variable names)
 	
 	def __repr__(self):
 		return f"Scope: {self.id}"
 
 class Addr:
 	def __init__(self, type, name, id, start, end):
-		self.type = type
-		self.name = name
-		self.id = id
-		self.start = start
-		self.end = end
+		self.type = type		# Types like (FUNC, IF, WHILE)
+		self.name = name		# Name of the address
+		self.id = id			# index in the addr stack
+		self.start = start		# Start flag of the addr
+		self.end = end			# End flag of the addr
 	
 	def __repr__(self):
 		return f"Addr({self.type}: {self.id}, {self.start}, {self.end})"
 
 class Func:
 	def __init__(self, name, id, params, ret_type, row, col, file):
-		self.name = name
-		self.id = id
-		self.params = params
-		self.ret_type = ret_type
+		self.name = name			# Name of the function defined by the user and is used to store in func_stack
+		self.id = id				# Actual identity of the function in assembly level
+		self.params = params		# List of tokens of the types that is used in the parameter
+		self.ret_type = ret_type	# Datatype to be returned by this function
+		self.ret_var = None			# Used when this function returns a value to a variable
 		self.row = row
 		self.col = col
 		self.file = file
-		self.ret_var = None
 	
 	def __repr__(self):
 		return f"Func: {self.name} : {self.params} -> {self.ret_type}"
@@ -240,10 +245,13 @@ def lex_file(file):
 
 class Slug:
 	def __init__(self, file, program):
+		# File names
 		self.file = os.path.abspath(file)
 		self.asm_file = file.strip(".slug") + ".asm"
 		self.obj_file = file.strip(".slug") + ".o"
 		self.exe_file = file.strip(".slug")
+
+		# Stores the tokens of the program
 		self.program = program
 
 		# Segments for assembly
@@ -258,33 +266,31 @@ class Slug:
 		self.curr_segment = ["text"]
 
 		# Stacks
-		self.scopes = []
-		self.line = []
-		self.addr_stack = []
-		self.var_stack = {}
-		self.define_stack = {}
-		self.func_stack = {}
-		self.called_func  = []
-		self.curr_func    = []
-		self.include_files = [self.file]
-		self.ret_stack = 0
+		self.scopes        = []				# Scope stack
+		self.line		   = []				# Holds the tokens of the current line
+		self.addr_stack    = []				# Address stack
+		self.called_func   = []				# Holds the function that was called
+		self.curr_func     = []				# Holds the current function addr 
+		self.var_stack     = {}				# Variable stack
+		self.func_stack    = {}				# Function stack
+		self.include_files = [self.file]	# Included files stack
+		self.ret_stack = 0					# Counts the values that were returned by a function
 
 		# Flags
-		self.assigned_var = None
-		self.con_var      = None
-		self.func_ret_var = None
-		self.operation    = None
+		self.assigned_var = None			# Stores the variable that was in a assigned state i.e a = 10 where a is a assigned var
+		self.con_var      = None			# Points to the variable that stores the values from the condition 
+		self.operation    = None			# It stores a function pointer of an operation to be conducted
 
 		# Counters
-		self.prog_cnt  = 0
-		self.str_cnt   = 0
-		self.token_cnt = 0
-		self.addr_cnt  = -1
-		self.local_var_cnt = 0
+		self.prog_cnt  = 0					# Points to the current position in the program (NOTE: program is an 2D array that means prog_cnt can also be called line_cnt)
+		self.str_cnt   = 0					# Counts the total number of strings that were used in the program
+		self.token_cnt = 0					# Current index of token in a current line
+		self.addr_cnt  = -1					# Holds the current address we are on
+		self.local_var_cnt = 0				# Holds memory offset of local variables
 	
 	def simulate(self):
 		token = Token(None, None, None, 0, 0, self.file)
-		error(token, "Simulation mode is not yet implemented.")
+		error(token, "Simulation mode is not implemented yet.")
 
 	""" Compilation instructions """
 	def __start_scope(self):
@@ -368,6 +374,8 @@ class Slug:
 	
 	""" Arthimetic operation """
 	def __plus(self, tok_a, tok_b):
+		if tok_a.name == STR:
+			error(tok_a, f"`+` operation not supported for strings.")
 		type_a = type_b = None
 		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} + {tok_b.id}\n"
 
@@ -413,6 +421,8 @@ class Slug:
 			error(tok_b, f"Cannot use `+` operation between types `{type_a}` and `{type_b}`.")
 
 	def __minus(self, tok_a, tok_b):
+		if tok_a.name == STR:
+			error(tok_a, f"`+` operation not supported for strings.")
 		type_a = type_b = None
 		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} - {tok_b.id}\n"
 
@@ -457,6 +467,8 @@ class Slug:
 			error(tok_b, f"Cannot use `-` operation between types `{type_a}` and `{type_b}`.")
 
 	def __mult(self, tok_a, tok_b):
+		if tok_a.name == STR:
+			error(tok_a, f"`+` operation not supported for strings.")
 		type_a = type_b = None
 		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} * {tok_b.id}\n"
 
@@ -501,6 +513,8 @@ class Slug:
 			error(tok_b, f"Cannot use `*` operation between types `{type_a}` and `{type_b}`.")
 
 	def __div(self, tok_a, tok_b):
+		if tok_a.name == STR:
+			error(tok_a, f"`+` operation not supported for strings.")
 		type_a = type_b = None
 		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} / {tok_b.id}\n"
 
@@ -547,6 +561,8 @@ class Slug:
 			error(tok_b, f"Cannot use `/` operation between types `{type_a}` and `{type_b}`.")
 
 	def __mod(self, tok_a, tok_b):
+		if tok_a.name == STR:
+			error(tok_a, f"`+` operation not supported for strings.")
 		type_a = type_b = None
 		self.segments[self.curr_segment[-1]] += f"    ;; {tok_a.id} % {tok_b.id}\n"
 
@@ -747,16 +763,6 @@ class Slug:
 					self.segments[self.curr_segment[-1]] += f"    ;; Puts {val.id}\n"
 					self.segments[self.curr_segment[-1]] += f"    puts __{val.id}__, {val.id}_len \n\n"
 				param_idx += 1
-			elif val.id in self.define_stack:
-				var = self.define_stack[val.value]
-				if var.name == INT or var.name == FLOAT:
-					self.segments[self.curr_segment[-1]] += f"    ;; print {var.id}\n"
-					self.segments[self.curr_segment[-1]] += f"    mov rdi, {var.value}\n"
-					self.segments[self.curr_segment[-1]] += f"    call print\n\n"
-				elif var.name == STR:
-					self.segments[self.curr_segment[-1]] += f"    ;; Puts {val.id}\n"
-					self.segments[self.curr_segment[-1]] += f"    puts __{val.id}__, {val.id}_len \n\n"
-				param_idx += 1
 			elif val.name in data_types:
 				if val.name == INT or val.name == FLOAT:
 					self.segments[self.curr_segment[-1]] += f"    ;; print {val.value}\n"
@@ -897,12 +903,20 @@ class Slug:
 								if self.line[self.token_cnt].value not in black_lst:
 									# Pushing onto the stack
 									self.segments[self.curr_segment[-1]] += f"    ;; Pushing {variable.id}\n"
-									self.segments[self.curr_segment[-1]] += f"    mov rax, {variable.value}\n"
+									if variable.name == INT or variable.name == FLOAT:
+										self.segments[self.curr_segment[-1]] += f"    mov rax, {variable.value}\n"
+									elif variable.name == STR:
+										#TODO: Create a proper way for pusing strings onto the stack (sometimes it needs `[]` sometimes it doesnt
+										self.segments[self.curr_segment[-1]] += f"    mov rax, {variable.value}\n"
 									self.segments[self.curr_segment[-1]] += f"    push rax\n"
 							else:
 								# Pushing onto the stack
 								self.segments[self.curr_segment[-1]] += f"    ;; Pushing {variable.id}\n"
-								self.segments[self.curr_segment[-1]] += f"    mov rax, {variable.value}\n"
+								if variable.name == INT or variable.name == FLOAT:
+									self.segments[self.curr_segment[-1]] += f"    mov rax, {variable.value}\n"
+								elif variable.name == STR:
+									#TODO: Create a proper way for pusing strings onto the stack (sometimes it needs `[]` sometimes it doesnt
+									self.segments[self.curr_segment[-1]] += f"    mov rax, {variable.value}\n"
 								self.segments[self.curr_segment[-1]] += f"    push rax\n"
 								self.token_cnt += 1
 
@@ -1195,17 +1209,23 @@ class Slug:
 						if name.name != WORD:
 							error(name, f"`%define` keyword only accept `word` as a name but got `{name.name}`.")
 						value = params[1]
-						if value.name != "int":
-							error(value, f"`%define` keyword only accept `int` as a value but got `{value.name}`.")
-						if name.value in self.define_stack:
+						if value.name not in data_types:
+							error(value, f"`%define` keyword only accept data types as a value but got `{value.name}`.")
+						if name.value in self.var_stack:
 							error(name, f"Name `{name.value}` has already been defined.")
 
 						variable = Token(value.name, name.value, name.value, token.row, token.col, token.file)
 						if value.name == INT or value.name == FLOAT:
 							self.segments["define"] += f"%define __{variable.id}__ {value.value}\n"
+							variable.value = f"__{variable.id}__"
+						elif value.name == STR:
+							self.segments["define"] += f"%define __{variable.id}__ {value.value}\n"
+							self.segments["define"] += f"%define {variable.id}_len equ $ - __{variable.id}__\n"
+							variable.value = f"__{variable.id}__"
+						else:
+							error(variable, f"`{value.name}` type cant be used for definations.")
 
-						variable.value = f"__{variable.id}__"
-						self.define_stack.update({variable.id: variable})
+						self.var_stack.update({variable.id: variable})
 
 					elif token.value == SYSCALL1:
 						self.token_cnt += 1
@@ -1290,6 +1310,11 @@ class Slug:
 					elif token.value == ELSE:
 						self.__end_scope()
 						self.__start_scope()
+
+						addr = self.addr_stack[self.addr_cnt]
+						if addr.end:
+							error(token, f"Else without if.")
+
 						self.token_cnt += 1
 						self.segments.update({f"addr_{self.addr_stack[self.addr_cnt].id}_else": ""})
 						self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_if"] += f"    jne addr_{self.addr_stack[self.addr_cnt].id}_else\n"
@@ -1303,14 +1328,18 @@ class Slug:
 
 						self.token_cnt += 1
 						addr = self.addr_stack[self.addr_cnt]
+
+						if addr.end:
+							error(token, f"Cannot find the entry point to then `end`.")
+
 						if addr.type == IF:
-							print(self.curr_segment)
 							self.curr_segment.pop()
-							print(self.curr_segment)
 							self.segments[self.curr_segment[-1]] += self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_if"]
 							self.segments[self.curr_segment[-1]] += self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_then"]
+
 							if f"addr_{self.addr_stack[self.addr_cnt].id}_else" in self.segments:
 								self.segments[self.curr_segment[-1]] += self.segments[f"addr_{self.addr_stack[self.addr_cnt].id}_else"]
+
 							self.segments[self.curr_segment[-1]] += f"    jmp addr_{addr.id}_end\n"
 							self.segments[self.curr_segment[-1]] += f"addr_{addr.id}_end:\n"
 							self.segments.pop(f"addr_{self.addr_stack[self.addr_cnt].id}_if")
@@ -1324,8 +1353,10 @@ class Slug:
 						elif addr.type == FUNC:
 							if not addr.start:
 								error(self.func_stack[addr.name], f"Missing `in` token in function `{addr.name}`.")
-							self.segments[self.curr_segment[-1]] += f"    push 0\n"
-							self.segments[self.curr_segment[-1]] += f"    pop rax\n"
+							func = self.func_stack[addr.name]
+							if func.ret_type.value == INT or func.ret_type.value == FLOAT:
+								self.segments[self.curr_segment[-1]] += f"    push 0\n"
+								self.segments[self.curr_segment[-1]] += f"    pop rax\n"
 							self.segments[self.curr_segment[-1]] += f"    mov rbp, rsp\n"
 							self.segments[self.curr_segment[-1]] += f"    pop rbp\n"
 							self.segments[self.curr_segment[-1]] += f"    ret\n"
@@ -1346,6 +1377,7 @@ class Slug:
 								break
 
 					elif token.value == WHILE:
+						self.__end_scope()
 						self.__start_scope()
 						self.token_cnt += 1
 						self.addr_cnt = len(self.addr_stack)
@@ -1356,7 +1388,6 @@ class Slug:
 						self.segments[self.curr_segment[-1]] += f"addr_{self.addr_stack[self.addr_cnt].id}_while:\n"
 
 					elif token.value == DO:
-						self.__end_scope()
 						self.__start_scope()
 
 						self.token_cnt += 1
@@ -1518,6 +1549,12 @@ class Slug:
 						self.operation = self.__return
 
 					elif token.value == BRACK_OPEN:
+						if self.token_cnt == 0:
+							error(token, f"Use of brackets without the function name.")
+
+						if self.line[self.token_cnt - 1].name != WORD:
+							error(token, f"Use of brackets without the function name.")
+
 						self.token_cnt += 1
 
 						# Checking the types of the params
